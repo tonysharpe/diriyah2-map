@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="LAAR destination search and vehicle-specific site routing."
+  >
+
+  <meta
+    name="theme-color"
+    content="#FFFFFF"
+  >
+
+  <title>Diriyah 2 Map</title>
+
+
+  <!-- STYLESHEETS -->
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="style.css?v=hide-map-attribution-1"
+  >
+<!-- LIBRARIES -->
+
+  <script
+    defer
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  ></script>
+
+  <script
+    defer
+    src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"
+  ></script>
+
+
+  <!-- APPLICATION: LOAD EACH SCRIPT ONCE -->
+
+  <script
+    defer
+    src="script/app.js?v=hide-map-attribution-1"
+  ></script>
+<script
+    defer
+    src="script/location.js?v=live-tracking-camera-wakelock-3"
+  ></script>
+
+  <script
+    defer
+    src="script/routing.js?v=all-destinations-route-status-1"
+  ></script>
+
+  <script
+    defer
+    src="script/mapLayers.js?v=map-controls-hidden-1"
+  ></script>
+
+  <script defer src="script/routeDisplay.js?v=failed-route-start-destination-fit-1"></script>
+  <script defer src="script/map.js?v=remove-road-access-note-1"></script>
+</head>
+
+<body>
+
+  <div id="mapLoadingDialog" class="map-loading-dialog" role="status" aria-live="polite">
+    <span class="map-loading-dialog__spinner" aria-hidden="true"></span>
+    <span>Map Loading...</span>
+  </div>
+
+  <div id="vehicleRoutingUpdateDialog" class="map-loading-dialog vehicle-routing-update-dialog" role="status" aria-live="polite" hidden>
+    <span class="map-loading-dialog__spinner" aria-hidden="true"></span>
+    <span>Updating vehicle routes...</span>
+  </div>
+
+
+  <aside id="navigationPanel" aria-label="Navigation controls">
+
+    <!-- HEADER -->
+
+    <header class="site-header">
+      <h1>Diriyah 2 Map</h1>
+      <div id="mobileHeaderSummary" class="mobile-header-summary" aria-live="polite">
+        <span id="mobileHeaderVehicleIcon" class="mobile-header-summary__vehicle-icon" aria-hidden="true"></span>
+        <span id="mobileHeaderDestination">No Route Selected</span>
+      </div>
+      <div class="header-actions"><button id="panelToggle" class="mobile-panel-toggle" type="button" aria-expanded="true" aria-controls="navigationPanel">Hide</button><button id="liveRouteToggle" class="live-route-toggle" type="button" disabled>Start</button></div>
+    </header>
+<!-- VEHICLE -->
+    <section class="control-section" aria-labelledby="vehicleHeading">
+      <h2 id="vehicleHeading">Vehicle Type:</h2>
+      <select id="vehicleType" hidden disabled aria-hidden="true" tabindex="-1">
+        <option value="truck" selected>Truck</option>
+        <option value="bus">Bus</option>
+        <option value="minibus">Mini Bus</option>
+        <option value="pickup">Pick-up</option>
+        <option value="suv">Site Car</option>
+        <option value="car">Private Car</option>
+      </select>
+      <fieldset class="radio-options vehicle-options" aria-label="Vehicle type">
+        <legend class="visually-hidden">Vehicle type</legend>
+        <label title="Truck" aria-label="Truck">
+          <input type="radio" name="vehicleTypeChoice" value="truck" checked>
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M3 6h25v18H3zM28 13h9l7 7v4H28z" fill="currentColor"/><path d="M32 15v5h8l-5-5z" fill="#fff"/><circle cx="12" cy="25" r="4" fill="currentColor"/><circle cx="36" cy="25" r="4" fill="currentColor"/><circle cx="12" cy="25" r="1.5" fill="#fff"/><circle cx="36" cy="25" r="1.5" fill="#fff"/></svg>
+          <span class="vehicle-label">Truck</span>
+        </label>
+        <label title="Bus" aria-label="Bus">
+          <input type="radio" name="vehicleTypeChoice" value="bus">
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M5 5h34a4 4 0 0 1 4 4v15H3V9a4 4 0 0 1 2-4z" fill="currentColor"/><path d="M7 9h7v7H7zm10 0h7v7h-7zm10 0h7v7h-7zm10 0h3v7h-3z" fill="#fff"/><circle cx="11" cy="25" r="4" fill="currentColor"/><circle cx="36" cy="25" r="4" fill="currentColor"/><circle cx="11" cy="25" r="1.5" fill="#fff"/><circle cx="36" cy="25" r="1.5" fill="#fff"/></svg>
+          <span class="vehicle-label">Bus</span>
+        </label>
+        <label title="Mini Bus" aria-label="Mini Bus">
+          <input type="radio" name="vehicleTypeChoice" value="minibus">
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M7 7h25a5 5 0 0 1 4 2l7 9v6H4V11a4 4 0 0 1 3-4z" fill="currentColor"/><path d="M9 10h8v7H8zm11 0h8v7h-8zm11 0h2l5 7h-7z" fill="#fff"/><circle cx="12" cy="25" r="4" fill="currentColor"/><circle cx="36" cy="25" r="4" fill="currentColor"/><circle cx="12" cy="25" r="1.5" fill="#fff"/><circle cx="36" cy="25" r="1.5" fill="#fff"/></svg>
+          <span class="vehicle-label">Mini Bus</span>
+        </label>
+        <label title="Pick-up" aria-label="Pick-up">
+          <input type="radio" name="vehicleTypeChoice" value="pickup">
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M4 17h18V9h9l8 8h5v7H4z" fill="currentColor"/><path d="M25 11h5l5 6H25z" fill="#fff"/><path d="M4 17h16v4H4z" fill="currentColor"/><circle cx="12" cy="25" r="4" fill="currentColor"/><circle cx="36" cy="25" r="4" fill="currentColor"/><circle cx="12" cy="25" r="1.5" fill="#fff"/><circle cx="36" cy="25" r="1.5" fill="#fff"/></svg>
+          <span class="vehicle-label">Pick-up</span>
+        </label>
+        <label title="Site Car" aria-label="Site Car">
+          <input type="radio" name="vehicleTypeChoice" value="suv">
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M5 17l3-8q.5-2 3-2h19q2 0 3.5 2l5.5 7 4 2v7H5z" fill="#111111"/><path d="M11 9h9v7H9zM23 9h7l5 7H23z" fill="#ffffff"/><path d="M7 18h33v3H7z" fill="#333333"/><path d="M5 23h4l2 2H5zm34 0h4v2h-4z" fill="#111111"/><circle cx="13" cy="25" r="4.5" fill="#111111"/><circle cx="35" cy="25" r="4.5" fill="#111111"/><circle cx="13" cy="25" r="2" fill="#d9d9d9"/><circle cx="35" cy="25" r="2" fill="#d9d9d9"/><path d="M13 7h17" stroke="#555555" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="vehicle-label">Site Car</span>
+        </label>
+        <label title="Private Car" aria-label="Private Car">
+          <input type="radio" name="vehicleTypeChoice" value="car">
+          <svg class="vehicle-icon" viewBox="0 0 48 32" aria-hidden="true" focusable="false"><path d="M4 18l5-3 5-6h15l7 6 5 2 3 3v4H4v-4z" fill="currentColor"/><path d="M16 11h7v4h-9zm9 0h3l5 4H25z" fill="#fff"/><circle cx="12" cy="25" r="4" fill="currentColor"/><circle cx="36" cy="25" r="4" fill="currentColor"/><circle cx="12" cy="25" r="1.5" fill="#fff"/><circle cx="36" cy="25" r="1.5" fill="#fff"/></svg>
+          <span class="vehicle-label">Private Car</span>
+        </label>
+      </fieldset>
+    </section>
+
+
+
+
+
+
+    
+    <!-- START LOCATION -->
+    <section class="control-section" aria-labelledby="startingHeading">
+      <h2 id="startingHeading">Start Location:</h2>
+      <fieldset class="radio-options start-options" aria-label="Start location">
+        <legend class="visually-hidden">Start location</legend>
+        <label><input type="radio" name="startModeChoice" value="live" checked> Current Location</label>
+        <label><input type="radio" name="startModeChoice" value="map"> Set on Map</label>
+      </fieldset>
+      <select id="startMode" hidden disabled aria-hidden="true" tabindex="-1">
+        <option value="gate">Access Gate</option>
+        <option value="live" selected>Current Location</option>
+        <option value="map">Set on Map</option>
+      </select>
+    </section>
+
+<!-- DESTINATION -->
+    <section class="control-section" aria-labelledby="destinationHeading">
+      <h2 id="destinationHeading">Destination:</h2>
+      <div class="destination-filter-bar">
+        <label class="contractor-filter-trigger" title="Filter destinations"><input id="contractorFilterToggle" type="checkbox" disabled> Filters</label>
+        <button id="contractorFilterClear" class="destination-filter-clear" type="button" disabled>Clear filters</button>
+      </div>
+      <div class="contractor-filter-wrap">
+        <section id="contractorFilterDialog" class="contractor-filter-dialog" role="dialog" aria-label="Filter destinations" hidden>
+          <div class="contractor-filter-heading">
+            <strong>Filter destinations</strong>
+            <button id="contractorFilterClose" type="button" aria-label="Close destination filters">×</button>
+          </div>
+          <div class="destination-filter-groups">
+            <fieldset class="destination-filter-group destination-type-filter-group"><legend>Type</legend><div id="destinationTypeFilterOptions" class="contractor-filter-options"></div></fieldset>
+            <fieldset class="destination-filter-group"><legend>Contractor</legend><div id="contractorFilterOptions" class="contractor-filter-options"></div></fieldset>
+          </div>
+        </section>
+      </div>
+      <button id="destinationPickerToggle" class="destination-picker-toggle" type="button" aria-expanded="false" aria-controls="destinationPickerList" disabled>Select destination…</button>
+      <div id="destinationPickerList" class="destination-picker-list" role="listbox" aria-label="Available destinations" hidden></div>
+      <select id="end" disabled aria-hidden="true" tabindex="-1">
+        <option value="" selected>Select destination…</option>
+      </select>
+    </section>
+
+<!-- DEVELOPMENT FEATURES -->
+    <section class="control-section development-section">
+      <div class="development-section-heading">
+        <button id="developmentToggle" class="development-toggle" type="button" aria-expanded="false" aria-controls="developmentContent" aria-label="Expand Development Features">+</button>
+      </div>
+      <div id="developmentContent" class="development-content" hidden>
+      <h2 id="developmentHeading">Development Features</h2>
+      <label for="destinationSearch">Find destination</label>
+      <input id="destinationSearch" type="search" placeholder="Type to search…" autocomplete="off"
+        aria-describedby="searchStatus" disabled>
+      <p id="searchStatus" class="field-help" aria-live="polite"></p>
+
+      <section class="diagnostics-section" aria-labelledby="diagnosticsHeading">
+        <h3 id="diagnosticsHeading">Diagnostics</h3>
+        <p class="field-help">Destinations that cannot be reached with the selected vehicle and start location:</p>
+        <p id="diagnosticsStatus" class="field-help" aria-live="polite">Checking destination access…</p>
+        <ul id="unreachableDestinations" class="unreachable-destinations"></ul>
+        <h4 class="map-load-heading">Map load timings</h4>
+        <p id="mapLoadTimingSummary" class="field-help" aria-live="polite">Collecting timings…</p>
+        <ol id="mapLoadTimings" class="map-load-timings"></ol>
+      </section>
+
+<!-- ROUTE SUMMARY -->
+
+    <section
+      id="routeSummary"
+      class="route-summary"
+      aria-labelledby="routeSummaryHeading"
+      aria-live="polite"
+      hidden
+    >
+      <h2 id="routeSummaryHeading">
+        Route
+      </h2>
+
+      <div
+        id="summaryDestination"
+        class="summary-destination"
+      ></div>
+
+      <p class="summary-start">
+        From <span id="summaryStart"></span>
+      </p>
+
+      <div class="summary-metrics">
+        <div>
+          <span class="metric-label">
+            Distance
+          </span>
+
+          <span
+            id="summaryDistance"
+            class="metric-value"
+          ></span>
+        </div>
+
+        <div>
+          <span class="metric-label">
+            Est. time
+          </span>
+
+          <span
+            id="summaryTime"
+            class="metric-value"
+          ></span>
+        </div>
+      </div>
+
+      <details class="route-details">
+        <summary>
+          Details
+        </summary>
+
+        <p id="routeDetails"></p>
+      </details>
+    </section>
+
+
+    <!-- SHARE -->
+
+    <section
+      class="control-section share-section"
+      aria-labelledby="shareHeading"
+    >
+      <h2 id="shareHeading">
+        Share
+      </h2>
+
+      <button
+        id="copyLink"
+        type="button"
+        disabled
+      >
+        Copy link
+      </button>
+
+      <p
+        id="shareStatus"
+        class="field-help"
+        role="status"
+        aria-live="polite"
+      >
+        Select a LAAR.
+      </p>
+
+      <div id="shareFallback" hidden>
+        <label for="shareLink">
+          Link
+        </label>
+
+        <input
+          id="shareLink"
+          type="text"
+          readonly
+        >
+      </div>
+    </section>
+
+
+    <!-- GENERAL CONTROLS -->
+
+    <div class="button-row">
+      <button
+        id="clear"
+        type="button"
+        disabled
+      >
+        Clear
+      </button>
+
+      <button
+        id="fit"
+        type="button"
+        disabled
+      >
+        Whole site
+      </button>
+    </div>
+
+
+    <span id="networkDate" hidden></span>
+
+    <!-- STATUS -->
+
+    <p
+      id="status"
+      class="setup-status"
+      role="status"
+      aria-live="polite"
+    >
+      Loading…
+    </p>
+
+
+
+      <label for="start">Selected gate</label>
+      <select id="start" disabled></select>
+      <div class="button-row">
+        <button id="locate" type="button" disabled>Locate me</button>
+        <button id="stopLocation" type="button" disabled>Stop</button>
+      </div>
+      <p id="locationStatus" class="location-status" role="status" aria-live="polite">Location off.</p>
+
+    <noscript>
+      <p class="setup-status">
+        Enable JavaScript to use navigation.
+      </p>
+    </noscript>
+
+      </div>
+    </section>
+    <footer class="sidebar-credit">
+      <span>Developed by</span>
+      <img src="TranspoGroup.png" alt="TranspoGroup">
+      <span>for Diriyah2 SWL</span>
+    </footer>
+  </aside>
+
+
+  <!-- MAP -->
+
+  <main
+    id="map"
+    aria-label="Interactive LAAR navigation map"
+  ></main>
+
+  <!-- Live route action buttons are in the navigation panel header. -->
+  <div id="journeyControls" class="journey-controls" hidden>
+    <p id="journeyStage" class="journey-stage">Live Routing</p>
+    <div class="journey-actions">
+      <button id="startLiveRoute" type="button" class="primary-button">Start</button>
+      <button id="stopLiveRoute" type="button" class="stop-routing-button" hidden>Stop</button>
+    </div>
+    <div id="journeyGuidance" class="journey-guidance" hidden aria-live="polite">
+      <span id="journeyDirectionArrow" class="journey-direction-arrow" aria-hidden="true">↑</span>
+      <span id="journeyDirectionText">Waiting for heading…</span>
+    </div>
+  </div>
+
+  <script defer src="script/ui.js?v=mobile-collapsed-vehicle-destination-1"></script>
+  <script defer src="script/main.js?v=project-structure-1"></script>
+
+</body>
+</html>

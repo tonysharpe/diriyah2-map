@@ -1,0 +1,4662 @@
+/* =====================================================================
+   STYLESHEET NAVIGATION
+   ---------------------------------------------------------------------
+   01. Base theme variables and typography
+   02. Reset and page layout
+   03. Map container and page grid
+   04. Site header and network-date display
+   05. Sidebar sections and form fields
+   06. Button rows and shared button styles
+   07. Location status, setup status and notes
+   08. Route summary and destination sharing
+   09. Share-link controls and feedback
+   10. Leaflet controls and map presentation
+   11. Gate marker icons and marker placement
+   12. Gate marker labels and label positioning
+   13. Gate popup card styling
+   14. Map legend and road swatches
+   15. Responsive layout and reduced-motion rules
+   16. Mobile panel toggle and responsive overrides
+   17. Diriyah theme palette and component overrides
+   18. Help text and route-summary overrides
+   19. Map and Leaflet control overrides
+   20. Map legend and small-screen overrides
+   21. Application component theme overrides
+   22. Map theme variables and overlay styles
+   23. Recenter control and live-location marker
+   24. Journey controls and direction guidance
+   25. Journey prompts and mobile planner layout
+   26. Live-routing controls and journey panels
+   27. Mobile map stacking and touch behavior
+   28. Mobile live-route launcher and map controls
+   29. Destination picker and radio groups
+   30. Gate icon and map-key overrides
+   31. Map loading overlay and animation
+   32. Live-routing panel, header controls and diagnostics
+   33. Vehicle type selector and responsive tiles
+   Sections follow source order, not a rewritten cascade order. Later rules
+   intentionally override earlier rules; keep that order unless testing
+   confirms a safe refactor.
+   ===================================================================== */
+
+/* =========================================================
+   LAAR NAVIGATION — COMPLETE STYLESHEET
+
+   Requires the updated gate-icons-and-popups.js containing:
+     .vehicle-barrier
+     .vehicle-barrier__ground
+     .vehicle-barrier__cabinet
+     .vehicle-barrier__arm
+     .vehicle-barrier__support
+
+   Gate symbols are drawn entirely with CSS.
+   ========================================================= */
+
+
+/* ---------------------------------------------------------------------
+   01. Base theme variables and typography
+   --------------------------------------------------------------------- */
+
+:root {
+  --page-background: #F5F2EB;
+  --panel-background: #FFFFFF;
+
+  --text-primary: #302C28;
+  --text-secondary: #625E56;
+  --text-muted: #827E76;
+
+  --border-color: #E5E1D8;
+  --border-strong: #D8D0C4;
+
+  --navy: #302C28;
+  --navy-hover: #454039;
+
+  --teal: #32665B;
+  --teal-dark: #254F46;
+  --teal-soft: #E8F0EC;
+  --danger: #A83F3A;
+  --danger-soft: #FAECEA;
+
+  --panel-width: 370px;
+
+  --radius-small: 7px;
+  --radius-medium: 10px;
+  --radius-large: 13px;
+
+  --shadow-small: 0 1px 5px rgba(48, 44, 40, 0.06);
+  --shadow-medium: 0 5px 16px rgba(48, 44, 40, 0.12);
+
+  --font-main:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+
+/* ---------------------------------------------------------------------
+   02. Reset and page layout
+   --------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: grid;
+  grid-template-columns: var(--panel-width) minmax(0, 1fr);
+
+  overflow: hidden;
+
+  background: var(--page-background);
+  color: var(--text-primary);
+
+  font-family: var(--font-main);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+a {
+  color: var(--teal);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(8, 127, 115, 0.4);
+  outline-offset: 3px;
+}
+
+
+/* ---------------------------------------------------------------------
+   03. Map container and page grid
+   --------------------------------------------------------------------- */
+
+body > aside {
+  position: relative;
+  z-index: 1000;
+
+  min-width: 0;
+  height: 100%;
+  padding: 24px 22px;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  background: var(--panel-background);
+
+  border-right: 1px solid var(--border-color);
+  box-shadow: 4px 0 18px rgba(21, 43, 66, 0.05);
+
+  scrollbar-width: thin;
+  scrollbar-color: #bdcdd9 transparent;
+}
+
+body > aside::-webkit-scrollbar {
+  width: 7px;
+}
+
+body > aside::-webkit-scrollbar-thumb {
+  background: #bdcdd9;
+  border: 2px solid #ffffff;
+  border-radius: 8px;
+}
+
+#map {
+  position: relative;
+
+  min-width: 0;
+  min-height: 0;
+
+  width: 100%;
+  height: 100%;
+}
+
+
+/* ---------------------------------------------------------------------
+   04. Site header and network-date display
+   --------------------------------------------------------------------- */
+
+.site-header {
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+
+  border-bottom: 1px solid var(--border-color);
+}
+
+
+.site-header h1 {
+  margin-bottom: 8px;
+
+  color: var(--navy);
+
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.7px;
+}
+
+.site-header > p {
+  margin-bottom: 14px;
+
+  color: var(--text-secondary);
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+
+#networkDate {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+
+/* ---------------------------------------------------------------------
+   05. Sidebar sections and form fields
+   --------------------------------------------------------------------- */
+
+.control-section {
+  margin-bottom: 22px;
+}
+
+.control-section h2 {
+  margin-bottom: 12px;
+
+  color: var(--navy);
+
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+body > aside label {
+  display: block;
+  margin-bottom: 6px;
+
+  color: var(--text-secondary);
+
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+body > aside input,
+body > aside select {
+  display: block;
+
+  width: 100%;
+  min-height: 42px;
+
+  margin-bottom: 12px;
+  padding: 10px 11px;
+
+  background: #ffffff;
+  color: var(--text-primary);
+
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-small);
+
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+body > aside select {
+  padding-right: 28px;
+}
+
+body > aside input::placeholder {
+  color: #8191a0;
+  opacity: 1;
+}
+
+body > aside input:focus,
+body > aside select:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(8, 127, 115, 0.1);
+  outline: none;
+}
+
+body > aside input:focus-visible,
+body > aside select:focus-visible {
+  outline: 2px solid rgba(8, 127, 115, 0.4);
+  outline-offset: 2px;
+}
+
+body > aside input:disabled,
+body > aside select:disabled {
+  background: #f1f4f7;
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+#start {
+  margin-bottom: 14px;
+}
+
+.field-help {
+  margin: -4px 0 12px;
+
+  color: var(--text-muted);
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* ---------------------------------------------------------------------
+   06. Button rows and shared button styles
+   --------------------------------------------------------------------- */
+
+body > aside button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 40px;
+  padding: 9px 12px;
+
+  background: #ffffff;
+  color: var(--navy);
+
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-small);
+
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+body > aside button:hover:not(:disabled) {
+  background: #f1f6fa;
+  border-color: #8fa8bc;
+}
+
+body > aside button:active:not(:disabled) {
+  background: #e8f0f6;
+}
+
+body > aside button:disabled {
+  background: #f1f4f7;
+  color: #8b9aa7;
+
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.button-row > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+body > aside .primary-button {
+  width: 100%;
+  min-height: 46px;
+
+  margin-bottom: 20px;
+  padding: 12px 14px;
+
+  background: var(--teal);
+  color: #ffffff;
+
+  border-color: var(--teal);
+
+  font-size: 13px;
+  box-shadow: 0 3px 10px rgba(8, 127, 115, 0.15);
+}
+
+body > aside .primary-button:hover:not(:disabled) {
+  background: var(--teal-dark);
+  border-color: var(--teal-dark);
+}
+
+body > aside .primary-button:active:not(:disabled) {
+  background: #05554e;
+  border-color: #05554e;
+}
+
+
+/* ---------------------------------------------------------------------
+   07. Location status, setup status and notes
+   --------------------------------------------------------------------- */
+
+.location-status,
+.setup-status {
+  padding: 10px 12px;
+
+  background: #f3f6f9;
+  color: var(--text-secondary);
+
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+
+  font-size: 12px;
+  line-height: 1.6;
+
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.location-status {
+  margin-bottom: 0;
+}
+
+.setup-status {
+  margin: 14px 0;
+}
+
+.note {
+  margin-bottom: 12px;
+
+  color: var(--text-muted);
+
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+
+/* ---------------------------------------------------------------------
+   08. Route summary and destination sharing
+   --------------------------------------------------------------------- */
+
+.route-summary {
+  margin-bottom: 22px;
+  padding: 16px;
+
+  background: #f4faf8;
+
+  border: 1px solid #cce4dc;
+  border-radius: var(--radius-medium);
+}
+
+.route-summary h2 {
+  margin-bottom: 12px;
+
+  color: var(--navy);
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.summary-destination {
+  margin-bottom: 5px;
+
+  color: var(--navy);
+
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+
+  overflow-wrap: anywhere;
+}
+
+.summary-start {
+  margin-bottom: 15px;
+
+  color: var(--text-secondary);
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#summaryStart {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.summary-metrics > div {
+  min-width: 0;
+  padding: 10px;
+
+  background: #ffffff;
+
+  border: 1px solid #dcebe5;
+  border-radius: var(--radius-small);
+}
+
+.metric-label {
+  display: block;
+  margin-bottom: 4px;
+
+  color: var(--text-muted);
+
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.metric-value {
+  display: block;
+
+  color: var(--teal-dark);
+
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+
+  overflow-wrap: anywhere;
+}
+
+.route-details {
+  padding-top: 12px;
+  border-top: 1px solid #d2e5dd;
+}
+
+.route-details > summary {
+  color: var(--text-secondary);
+
+  font-size: 11px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.route-details > summary:hover {
+  color: var(--teal-dark);
+}
+
+#routeDetails {
+  margin: 10px 0 0;
+
+  color: var(--text-secondary);
+
+  font-size: 11px;
+  line-height: 1.7;
+
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+
+/* ---------------------------------------------------------------------
+   09. Share-link controls and feedback
+   --------------------------------------------------------------------- */
+
+.share-section {
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+#copyLink {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+#shareStatus {
+  margin-top: 0;
+}
+
+#shareFallback {
+  margin-bottom: 12px;
+}
+
+#shareLink {
+  margin-bottom: 0;
+
+  background: #f7f9fb;
+  font-size: 11px;
+}
+
+
+/* ---------------------------------------------------------------------
+   10. Leaflet controls and map presentation
+   --------------------------------------------------------------------- */
+
+.leaflet-container {
+  font-family: var(--font-main);
+}
+
+.leaflet-bar {
+  border: 1px solid rgba(21, 43, 66, 0.15) !important;
+  border-radius: var(--radius-small) !important;
+
+  box-shadow: var(--shadow-small) !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background: #ffffff;
+  color: var(--navy);
+}
+
+.leaflet-bar a:hover {
+  background: #f1f6fa;
+}
+
+.leaflet-control-layers {
+  max-width: min(260px, calc(100vw - 28px));
+
+  background: #ffffff;
+
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-small);
+
+  box-shadow: var(--shadow-small);
+}
+
+.leaflet-control-layers-expanded {
+  padding: 10px 12px;
+}
+
+.leaflet-control-layers label {
+  margin-bottom: 4px;
+
+  color: var(--text-primary);
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.leaflet-control-layers-selector {
+  accent-color: var(--teal);
+}
+
+.leaflet-control-scale-line {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--navy);
+
+  border-color: var(--navy);
+  font-size: 10px;
+}
+
+.leaflet-control-attribution {
+  max-width: 100%;
+
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: var(--text-secondary);
+
+  font-size: 10px;
+}
+
+.leaflet-control-attribution a {
+  color: var(--teal-dark);
+}
+
+
+/* ---------------------------------------------------------------------
+   11. Gate marker icons and marker placement
+   --------------------------------------------------------------------- */
+
+.laar-gate-icon {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+
+/*
+ * Do not set a transform on .laar-gate-icon:
+ * Leaflet controls its map positioning.
+ */
+
+/* White circular gate markers with a compact orange security guard. */
+.laar-gate-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: #FFFFFF !important;
+  color: #F28C28;
+  border: 1px solid #D5E1E9;
+  border-radius: 50% !important;
+  overflow: hidden;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+.laar-gate-marker::after { content: none !important; }
+.security-guard-symbol {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.security-guard-symbol__head,
+.security-guard-symbol__cap,
+.security-guard-symbol__body { fill: #F28C28; }
+.security-guard-symbol__badge { fill: #FFFFFF; }
+.laar-gate-icon:hover .laar-gate-marker {
+  background: #FFFFFF !important;
+  border-color: #D5E1E9 !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+}
+.laar-gate-marker.is-selected,
+.laar-gate-icon:hover .laar-gate-marker.is-selected {
+  background: #FFFFFF !important;
+  color: #F28C28 !important;
+  border-color: #D5E1E9 !important;
+  outline: none !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+}
+.laar-gate-icon:focus-visible .laar-gate-marker {
+  outline: 2px solid #F28C28 !important;
+  outline-offset: 2px;
+}
+
+/* Permanent gate names sit directly beneath the matching icon. */
+.leaflet-tooltip.laar-gate-label {
+  margin-top: 0;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.97) !important;
+  color: var(--navy) !important;
+  border: 1px solid #D5E1E9 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12) !important;
+  font-family: var(--font-main);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap !important;
+}
+.leaflet-tooltip-bottom.laar-gate-label::before {
+  border-bottom-color: #D5E1E9 !important;
+}
+
+/* The map key uses the same white circular guard symbol, never a dark disc. */
+.map-legend .legend-gate,
+.map-legend .legend-gate--selected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: #FFFFFF !important;
+  border: 1px solid #D5E1E9 !important;
+  border-radius: 50% !important;
+  outline: none !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+  overflow: hidden;
+}
+.map-legend .legend-gate .security-guard-symbol {
+  width: 100%;
+  height: 100%;
+}
+.map-legend .legend-gate--selected {
+  border-color: #D5E1E9 !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+}
+
+/* ---------------------------------------------------------------------
+   12. Gate marker labels and label positioning
+   --------------------------------------------------------------------- */
+
+
+/* Ground line. */
+
+
+/* Left-hand mechanism cabinet. */
+
+
+/* Blue status indicator on the cabinet. */
+
+
+/* Cabinet access-panel detail. */
+
+
+/* Horizontal boom arm with red reflective bands. */
+
+
+/* Right-hand receiving stand. */
+
+
+/* Support cap directly beneath the arm. */
+
+
+.leaflet-tooltip.laar-gate-label {
+  width: max-content !important;
+  min-width: max-content;
+  max-width: none !important;
+
+  padding: 5px 9px;
+
+  background: rgba(255, 255, 255, 0.97);
+  color: var(--navy);
+
+  border: 1px solid #d5e1e9;
+  border-radius: 6px;
+
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12);
+
+  font-family: var(--font-main);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+}
+
+.leaflet-tooltip-top.laar-gate-label::before {
+  border-top-color: #d5e1e9;
+}
+
+.leaflet-tooltip-bottom.laar-gate-label::before {
+  border-bottom-color: #d5e1e9;
+}
+
+.leaflet-tooltip-left.laar-gate-label::before {
+  border-left-color: #d5e1e9;
+}
+
+.leaflet-tooltip-right.laar-gate-label::before {
+  border-right-color: #d5e1e9;
+}
+
+
+/* ---------------------------------------------------------------------
+   13. Gate popup card styling
+   --------------------------------------------------------------------- */
+
+.laar-gate-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+
+  background: #ffffff;
+
+  border-radius: var(--radius-large);
+  box-shadow: var(--shadow-medium);
+
+  overflow: hidden;
+}
+
+.laar-gate-popup .leaflet-popup-content {
+  margin: 0;
+
+  font-family: var(--font-main);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.laar-gate-popup .leaflet-popup-tip {
+  background: #ffffff;
+}
+
+.laar-gate-popup a.leaflet-popup-close-button {
+  top: 7px;
+  right: 7px;
+
+  width: 26px;
+  height: 26px;
+
+  color: rgba(255, 255, 255, 0.85);
+
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 26px;
+}
+
+.laar-gate-popup a.leaflet-popup-close-button:hover {
+  color: #ffffff;
+}
+
+.laar-gate-card {
+  width: 100%;
+
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+.laar-gate-card__header {
+  padding: 16px 34px 15px 16px;
+
+  background: var(--navy);
+  color: #ffffff;
+}
+
+.laar-gate-card__eyebrow {
+  margin-bottom: 6px;
+
+  color: #82d8ed;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1.4;
+}
+
+.laar-gate-card__title {
+  margin: 0;
+
+  color: #ffffff;
+
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.3;
+
+  overflow-wrap: anywhere;
+}
+
+.laar-gate-card__body {
+  padding: 15px 16px 16px;
+}
+
+
+.laar-gate-card__metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+
+  border-bottom: 1px solid var(--border-color);
+}
+
+.laar-gate-card__metric-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.laar-gate-card__metric-value {
+  color: var(--navy);
+
+  font-size: 15px;
+  font-weight: 800;
+
+  white-space: nowrap;
+}
+
+.laar-gate-popup .laar-gate-card__note {
+  margin: 0;
+
+  color: var(--text-muted);
+
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+
+/* ---------------------------------------------------------------------
+   14. Map legend and road swatches
+   --------------------------------------------------------------------- */
+
+.map-legend {
+  min-width: 190px;
+  max-width: 240px;
+
+  padding: 12px 14px;
+
+  background: rgba(255, 255, 255, 0.97);
+  color: var(--text-primary);
+
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-medium);
+
+  box-shadow: var(--shadow-small);
+}
+
+.map-legend__title {
+  margin-bottom: 10px;
+
+  color: var(--navy);
+
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.map-legend__row {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  min-height: 28px;
+  margin-bottom: 7px;
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.map-legend__row:last-child {
+  margin-bottom: 0;
+}
+
+.map-legend__row > span:last-child {
+  min-width: 0;
+}
+
+/* CSS barrier inside the legend. */
+.legend-gate {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 26px;
+
+  width: 26px;
+  height: 26px;
+
+  background-color: var(--navy);
+  background-image: none !important;
+
+  border-radius: 7px;
+
+  overflow: hidden;
+}
+
+.legend-gate .vehicle-barrier {
+  transform: scale(0.72);
+  transform-origin: center;
+}
+
+.legend-gate--selected {
+  background-color: var(--teal);
+
+  outline: 2px solid rgba(8, 127, 115, 0.35);
+  outline-offset: 2px;
+}
+
+.legend-location {
+  display: block;
+  flex: 0 0 16px;
+
+  width: 16px;
+  height: 16px;
+
+  margin-left: 5px;
+  margin-right: 5px;
+
+  background: var(--map-location);
+
+  border: 3px solid var(--map-location-outline);
+  border-radius: 50%;
+
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--map-location) 30%, transparent);
+}
+
+.legend-area {
+  display: block;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 18px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--map-area-fill) var(--map-area-fill-opacity), transparent);
+  border: 2px solid var(--map-area-outline);
+  border-radius: 4px;
+}
+
+.legend-route {
+  display: block;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 5px;
+  background: var(--map-route);
+  border-radius: 4px;
+}
+
+
+/* ---------------------------------------------------------------------
+   15. Responsive layout and reduced-motion rules
+   --------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  :root {
+    --panel-width: 330px;
+  }
+
+  body > aside {
+    padding: 20px 18px;
+  }
+
+  .site-header h1 {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 760px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+
+    overflow: auto;
+  }
+
+  body > aside {
+    order: 1;
+
+    width: 100%;
+    height: auto;
+    padding: 20px;
+
+    overflow: visible;
+
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+
+    box-shadow: none;
+  }
+
+  #map {
+    order: 0;
+    flex: 0 0 auto;
+
+    width: 100%;
+    height: 52vh;
+    height: 52dvh;
+
+    min-height: 320px;
+  }
+
+  .site-header {
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+  }
+
+  .control-section {
+    margin-bottom: 18px;
+  }
+
+  .map-legend {
+    min-width: 165px;
+    max-width: 190px;
+
+    padding: 9px 10px;
+  }
+
+  .map-legend__title {
+    margin-bottom: 7px;
+    font-size: 11px;
+  }
+
+  .map-legend__row {
+    gap: 8px;
+
+    min-height: 25px;
+    margin-bottom: 5px;
+
+    font-size: 10px;
+  }
+
+  body > aside input,
+  body > aside select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  body > aside {
+    padding: 18px 15px;
+  }
+
+  #map {
+    min-height: 290px;
+  }
+
+  .site-header h1 {
+    font-size: 24px;
+  }
+
+  .button-row {
+    gap: 6px;
+  }
+
+  .button-row > button {
+    padding: 9px 7px;
+    font-size: 11px;
+  }
+
+  .summary-metrics {
+    gap: 8px;
+  }
+
+  .metric-value {
+    font-size: 17px;
+  }
+
+  .map-legend {
+    min-width: 155px;
+    max-width: 175px;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   16. Mobile panel toggle and responsive overrides
+   --------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* =========================================================
+   MOBILE FIELD-USE LAYOUT
+   Map-first canvas with a touch-friendly bottom-sheet planner.
+   ========================================================= */
+
+.mobile-panel-toggle {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    display: block;
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  #map {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  body > aside {
+    position: fixed;
+    z-index: 1200;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 84vh;
+    max-height: 84dvh;
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    background: var(--panel-background, #fff);
+    border: 1px solid var(--border-color);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgba(48, 44, 40, 0.16);
+    transform: translateY(0);
+    transition: transform 220ms ease;
+  }
+
+  body > aside.mobile-panel-collapsed {
+    transform: translateY(calc(100% - 76px - env(safe-area-inset-bottom)));
+  }
+
+  /* Only the header and Plan route button remain interactive while collapsed. */
+  body > aside.mobile-panel-collapsed {
+    overflow: hidden !important;
+    touch-action: none;
+  }
+
+  body > aside.mobile-panel-collapsed .mobile-panel-toggle {
+    touch-action: manipulation;
+  }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+    margin: 0 0 10px;
+    padding: 0 0 10px;
+  }
+
+  .site-header h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.2;
+  }
+
+  .mobile-panel-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-width: 116px;
+    min-height: 44px;
+    padding: 9px 13px;
+    background: var(--teal, #32665B);
+    color: #fff;
+    border: 1px solid var(--teal, #32665B);
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: 700;
+    touch-action: manipulation;
+  }
+
+  .mobile-panel-toggle:active {
+    transform: scale(0.98);
+  }
+
+  body > aside input,
+  body > aside select {
+    width: 100%;
+    min-height: 48px;
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+
+  body > aside button {
+    min-height: 48px;
+    font-size: 14px;
+    touch-action: manipulation;
+  }
+
+  .control-section {
+    margin-bottom: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .control-section h2 {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .button-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .button-row > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+
+  #route {
+    width: 100%;
+    min-height: 52px;
+    margin: 8px 0 12px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .route-summary {
+    margin: 8px 0 12px;
+    padding: 12px;
+  }
+
+  .route-summary h2 {
+    margin-top: 0;
+  }
+
+  .summary-destination {
+    font-size: 16px;
+    line-height: 1.3;
+  }
+
+  .summary-start {
+    margin-bottom: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .summary-metrics > div {
+    padding: 8px;
+  }
+
+  .metric-value {
+    font-size: 17px;
+  }
+
+  .summary-metrics {
+    gap: 12px;
+  }
+
+  .metric-value {
+    font-size: 18px;
+  }
+
+  .map-legend {
+    max-width: min(190px, calc(100vw - 32px));
+    min-width: 0;
+    padding: 8px 10px;
+  }
+
+  .map-legend__title {
+    font-size: 11px;
+  }
+
+  .map-legend__row {
+    min-height: 22px;
+    margin: 3px 0;
+    font-size: 10px;
+  }
+
+  .leaflet-top {
+    top: max(8px, env(safe-area-inset-top));
+  }
+
+  .leaflet-left {
+    left: max(8px, env(safe-area-inset-left));
+  }
+
+  .leaflet-right {
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  .leaflet-bottom {
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .leaflet-bar a,
+  .leaflet-touch .leaflet-bar a {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+    font-size: 22px;
+  }
+
+  .leaflet-control-scale {
+    margin-bottom: 10px;
+  }
+
+  .setup-status,
+  .location-status {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  body > aside {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .mobile-panel-toggle {
+    min-width: 104px;
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .site-header h1 {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 760px) {
+  body > aside {
+    transition: none;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   17. Diriyah theme palette and component overrides
+   --------------------------------------------------------------------- */
+/* ================================================================
+   DIRIYAH THEME
+   Consolidated from diriyah-theme.css
+   ================================================================ */
+
+/*
+ * DIRIYAH-INSPIRED PRESENTATION
+ *
+ * Load after style.css.
+ * Keeps the existing application layout.
+ */
+
+
+/* PALETTE */
+
+:root {
+  --sand: #F5F2EB;
+  --paper: #FFFFFF;
+  --ink: #302C28;
+  --muted: #625E56;
+  --line: #E5E1D8;
+  --earth-outline: #827E76;
+}
+
+
+/* BASE */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+
+  color: var(--ink);
+  background: var(--sand);
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+aside {
+  background: var(--paper);
+  color: var(--ink);
+
+  border-right:
+    1px solid var(--line);
+
+  box-shadow:
+    3px 0 18px rgba(48, 43, 39, 0.09);
+}
+
+
+/* HEADER */
+
+.site-header {
+  padding-bottom: 16px;
+
+  background: var(--sand);
+  color: var(--ink);
+
+  border-bottom:
+    1px solid var(--line);
+}
+
+.site-header h1 {
+  margin-bottom: 8px;
+
+  color: var(--ink);
+
+  letter-spacing: -0.035em;
+}
+
+.site-header > p {
+  display: none;
+}
+
+
+/* SECTIONS */
+
+.control-section {
+  padding-top: 16px;
+  padding-bottom: 16px;
+
+  border-color: var(--line);
+}
+
+.control-section h2 {
+  margin-top: 0;
+  margin-bottom: 12px;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  letter-spacing: 0;
+}
+
+h2,
+label {
+  color: var(--ink);
+}
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Avoid repeating the visible Vehicle section heading. */
+
+label[for="vehicleType"] {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  padding: 0;
+  margin: -1px;
+
+  overflow: hidden;
+
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+
+  white-space: nowrap;
+
+  border: 0;
+}
+
+
+/* FORM CONTROLS */
+
+input,
+select {
+  background: var(--paper);
+  color: var(--ink);
+
+  border: 1px solid var(--border-strong, #D8D0C4);
+  border-radius: 8px;
+}
+
+select,
+input[type="search"],
+input[type="text"] {
+  min-height: 42px;
+
+  font-size: 14px;
+}
+
+input::placeholder {
+  color: #75695e;
+  opacity: 1;
+}
+
+
+/* BUTTONS */
+
+button {
+  min-height: 40px;
+
+  background: var(--sand);
+  color: var(--ink);
+
+  border: 1px solid var(--border-strong, #D8D0C4);
+  border-radius: 8px;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+button:not(:disabled):hover {
+  background: #EEEAE2;
+
+  border-color:
+    var(--earth-outline);
+}
+
+button.primary-button,
+#route {
+  background: var(--teal);
+  color: var(--paper);
+
+  border-color:
+    var(--teal);
+}
+
+button.primary-button:not(:disabled):hover,
+#route:not(:disabled):hover {
+  background: #2F6FD0;
+}
+
+
+/* DISABLED AND FOCUS */
+
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 1;
+
+  background: #F0EDE6;
+  color: #827E76;
+
+  border-color: #E5E1D8;
+
+  cursor: not-allowed;
+}
+
+:where(
+  button,
+  input,
+  select,
+  summary,
+  a
+):focus-visible {
+  outline:
+    3px solid var(--map-public-road);
+
+  outline-offset: 3px;
+}
+
+
+/* ---------------------------------------------------------------------
+   18. Help text and route-summary overrides
+   --------------------------------------------------------------------- */
+/* HELP TEXT */
+
+.field-help,
+.note,
+.summary-start {
+  color: var(--muted);
+}
+
+.field-help {
+  margin-top: 8px;
+  margin-bottom: 0;
+
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+/* ROUTE SUMMARY */
+
+.route-summary {
+  background: var(--sand);
+  color: var(--ink);
+
+  border: 1px solid var(--line);
+
+  border-left:
+    4px solid var(--map-route);
+
+  border-radius: 10px;
+}
+
+.summary-destination,
+.metric-value {
+  color: var(--ink);
+}
+
+.metric-label {
+  color: var(--muted);
+}
+
+.route-details {
+  border-color: var(--line);
+}
+
+#routeDetails {
+  white-space: pre-line;
+
+  color: var(--muted);
+}
+
+
+/* STATUS */
+
+.setup-status,
+.location-status {
+  background: var(--sand);
+  color: var(--ink);
+
+  border-color: var(--line);
+  border-radius: 8px;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#status {
+  white-space: pre-line;
+}
+
+
+/* COLLAPSIBLE GUIDANCE */
+
+.navigation-guidance {
+  margin-top: 16px;
+  padding-top: 12px;
+
+  border-top:
+    1px solid var(--line);
+}
+
+.navigation-guidance > summary {
+  color: var(--muted);
+
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.navigation-guidance > summary:hover {
+  color: var(--ink);
+}
+
+.navigation-guidance__body {
+  padding-top: 6px;
+}
+
+.navigation-guidance__body .note {
+  margin: 10px 0 0;
+
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+
+/* ---------------------------------------------------------------------
+   19. Map and Leaflet control overrides
+   --------------------------------------------------------------------- */
+/* MAP */
+
+
+.leaflet-container {
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+
+/* LEAFLET CONTROLS */
+
+.leaflet-bar {
+  border:
+    1px solid #bca389 !important;
+
+  box-shadow:
+    0 2px 10px rgba(48, 43, 39, 0.14);
+}
+
+.leaflet-bar a {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.leaflet-bar a:hover {
+  background: var(--sand);
+}
+
+
+/* POPUPS */
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+}
+
+.leaflet-tooltip {
+  background: var(--paper);
+  color: var(--ink);
+
+  border-color: var(--line);
+}
+
+
+/* GATE LABELS */
+
+.laar-gate-label {
+  background: var(--paper);
+  color: var(--ink);
+
+  border: 1px solid var(--border-strong, #D8D0C4);
+
+  font-weight: 700;
+
+  box-shadow:
+    0 1px 4px rgba(48, 43, 39, 0.18);
+}
+
+
+/* GATE POPUPS */
+
+.laar-gate-card {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.laar-gate-card__header {
+  background: var(--sand);
+
+  border-bottom:
+    1px solid var(--line);
+}
+
+.laar-gate-card__title {
+  color: var(--ink);
+}
+
+.laar-gate-card__eyebrow {
+  color: var(--earth-outline);
+}
+
+.laar-gate-card__body {
+  background: var(--paper);
+}
+
+.laar-gate-card__metric {
+  border-color: var(--line);
+}
+
+.laar-gate-card__metric-label,
+.laar-gate-card__note {
+  color: var(--muted);
+}
+
+.laar-gate-card__metric-value {
+  color: var(--ink);
+}
+
+
+/* DARKER GATE BACKGROUNDS */
+
+.laar-gate-marker {
+  background: #C9B99F;
+
+  border-color: #FFFFFF;
+
+  box-shadow:
+    0 2px 6px rgba(48, 43, 39, 0.22);
+}
+
+.laar-gate-marker.is-selected {
+  background: #32665B;
+
+  border-color: #FFFFFF;
+
+  box-shadow:
+    0 0 0 4px rgba(24, 91, 97, 0.2),
+    0 2px 6px rgba(48, 43, 39, 0.22);
+}
+
+
+/* ---------------------------------------------------------------------
+   20. Map legend and small-screen overrides
+   --------------------------------------------------------------------- */
+/* LEGEND */
+
+.map-legend {
+  min-width: 0;
+  width: 190px;
+  max-width: 210px;
+
+  padding: 8px 10px;
+
+  background: var(--paper);
+  color: var(--ink);
+
+  border: 1px solid var(--line);
+  border-radius: 10px;
+
+  box-shadow:
+    0 3px 14px rgba(48, 43, 39, 0.13);
+
+  line-height: 1.45;
+}
+
+.map-legend__title {
+  margin-bottom: 8px;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.map-legend__row {
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+  margin: 6px 0;
+
+  font-size: 12px;
+}
+
+
+/* SMALL SCREENS */
+
+@media (max-width: 600px) {
+  .map-legend {
+    min-width: 150px;
+    max-width: 205px;
+
+    padding: 9px 11px;
+  }
+
+  .map-legend__row {
+    font-size: 11px;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   21. Application component theme overrides
+   --------------------------------------------------------------------- */
+/* MINIMALIST DIRIYAH SYSTEM
+   Keep the map quiet; reserve saturated colours for navigation meaning. */
+body > aside {
+  box-shadow: 2px 0 8px rgba(48, 44, 40, 0.035);
+}
+.site-header {
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+}
+
+.control-section {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+}
+.control-section h2 {
+  margin-bottom: 9px;
+}
+.route-summary {
+  background: #F7F5F0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--map-route);
+  border-radius: 9px;
+}
+.metric-value {
+  color: var(--map-route);
+}
+button.primary-button,
+#route {
+  background: var(--map-route);
+  border-color: var(--map-route);
+  box-shadow: none;
+}
+button.primary-button:not(:disabled):hover,
+#route:not(:disabled):hover {
+  background: #2F6FD0;
+  border-color: #2F6FD0;
+}
+button:not(:disabled):hover {
+  background: #F0EDE6;
+  border-color: #C9C1B5;
+}
+.leaflet-control-layers,
+.leaflet-bar,
+.map-legend {
+  border-color: var(--line) !important;
+  box-shadow: 0 1px 5px rgba(48, 44, 40, 0.08) !important;
+}
+.map-legend {
+  min-width: 164px;
+  max-width: 220px;
+  padding: 10px 12px;
+  border-radius: 9px;
+}
+.map-legend__title {
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.map-legend__row {
+  gap: 8px;
+  margin: 5px 0;
+  font-size: 11px;
+}
+.laar-gate-card__header {
+  background: #F5F2EB;
+  border-bottom: 1px solid var(--line);
+}
+.laar-gate-card__eyebrow {
+  color: var(--map-public-road);
+}
+.laar-gate-marker {
+  border-radius: 11px;
+  box-shadow: 0 2px 6px rgba(48, 44, 40, 0.14);
+}
+.laar-gate-marker.is-selected {
+  background: var(--map-public-road);
+  outline: 2px solid rgba(50, 102, 91, 0.18);
+  outline-offset: 2px;
+  box-shadow: 0 2px 7px rgba(48, 44, 40, 0.14);
+}
+@media (max-width: 760px) {
+  body > aside {
+    padding: 16px 16px;
+  }
+  .site-header {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+  .control-section {
+    padding-top: 7px;
+    padding-bottom: 7px;
+    margin-bottom: 5px;
+  }
+  .route-summary {
+    padding: 12px;
+  }
+}
+
+
+/* Keep form labels available to assistive technology without duplicating
+   nearby section headings or placeholders visually. */
+label[for="destinationSearch"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* SELECTED LAAR EMPHASIS */
+.leaflet-pane .selected-laar-tooltip {
+  background: #FFF8E8;
+  color: #603B0B;
+  border: 2px solid #9A5B13;
+  border-radius: 7px;
+  box-shadow: 0 2px 9px rgba(64, 42, 12, 0.24);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.leaflet-pane .selected-laar-tooltip::before {
+  border-top-color: #9A5B13;
+}
+
+
+/* COLLAPSIBLE MAP LEGEND */
+.map-legend__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-legend__toggle:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.map-legend__toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.map-legend__content[hidden] {
+  display: none !important;
+}
+
+.map-legend__content {
+  padding-top: 5px;
+}
+
+.map-legend__content .map-legend__row {
+  margin-top: 5px;
+}
+
+@media (max-width: 760px) {
+  .map-legend {
+    width: min(158px, calc(100vw - 28px));
+    min-width: 0;
+    max-width: calc(100vw - 28px);
+    padding: 6px 8px;
+  }
+
+  .map-legend__toggle {
+    min-height: 34px;
+    font-size: 12px;
+  }
+
+  .map-legend__content {
+    max-height: 42vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .map-legend__content .map-legend__row {
+    min-height: 22px;
+    margin: 4px 0;
+    font-size: 10px;
+  }
+
+  .map-legend__content .diriyah-legend-note {
+    margin-bottom: 2px;
+  }
+}
+
+
+/* The map cursor is set dynamically only when the pointer is within the
+   15 m snap radius of the nearest road permitted for the selected vehicle. */
+
+
+/* ---------------------------------------------------------------------
+   22. Map theme variables and overlay styles
+   --------------------------------------------------------------------- */
+/* =========================================================
+   SINGLE SOURCE OF TRUTH — SITE AND MAP THEME
+   Change palette values here; JavaScript map layers read these
+   custom properties rather than defining a second theme.
+   ========================================================= */
+:root {
+  --page-background: #E8EAED;
+  --panel-background: #FFFFFF;
+  --text-primary: #202124;
+  --text-secondary: #5F6368;
+  --text-muted: #70757A;
+  --border-color: #DADCE0;
+  --border-strong: #C7C9CC;
+  --navy: #202124;
+  --navy-hover: #3C4043;
+  --teal: #1A73E8;
+  --teal-dark: #1558B0;
+  --teal-soft: #E8F0FE;
+  --route-color: #4285F4;
+  --danger: #D93025;
+  --danger-soft: #FCE8E6;
+
+  /* Map palette — shared by Leaflet road layers and the map key. */
+  --map-major-road: #92A9C6;
+  --map-major-road-outline: #7189A8;
+  --map-public-road: #FFFFFF;
+  --map-haul-road: #F28C28;
+  --map-unknown-road: #DADCE0;
+  --map-road-outline: #C5C9CE;
+  --map-road-width: 4;
+
+  --map-route: #4285F4;
+  --map-route-width: 7.5;
+  --map-origin-connector: #AAB9CC;
+
+  --map-area-outline: #1A73E8;
+  --map-area-fill: #8AB4F8;
+  --map-area-fill-opacity: 30%;
+
+  --map-location: #136DF5;
+  --map-location-outline: #FFFFFF;
+  --map-location-focus: #43C7EE;
+
+  /* Site overlay palette — consumed by js/mapLayers.js. */
+  /* Site overlay palette — consumed by js/mapLayers.js. */
+  --map-masterplan-fill: #DFAF7E;
+  --map-masterplan-fill-opacity: 0.00;
+  --map-masterplan-stroke: #232323;
+  --map-masterplan-stroke-opacity: 0.10;
+  --map-masterplan-stroke-width: 1;
+  --map-masterplan-dash-array: 1 3;
+  --map-masterplan-line-cap: round;
+
+  --map-communities-fill: #DFAF7E;
+  --map-communities-fill-opacity: 0.05;
+  --map-communities-stroke: #232323;
+  --map-communities-stroke-opacity: 0.25;
+  --map-communities-stroke-width: 1;
+  --map-communities-dash-array: 1 3;
+  --map-communities-line-cap: round;
+
+  --map-boundary-fill: #DFAF7E;
+  --map-boundary-fill-opacity: 0.25;
+  --map-boundary-stroke: #232323;
+  --map-boundary-stroke-opacity: 0.5;
+  --map-boundary-stroke-width: 0;
+  --map-boundary-dash-array: 1 4;
+  --map-boundary-line-cap: round;
+}
+
+
+/* THEME OVERRIDES — moved from JavaScript into this stylesheet */
+/* =========================================================
+   GOOGLE MAPS-INSPIRED LIGHT THEME
+   Presentation only; routing rules and permissions are unchanged.
+   ========================================================= */
+:root {
+  --page-background: #E8EAED;
+  --panel-background: #FFFFFF;
+  --text-primary: #202124;
+  --text-secondary: #5F6368;
+  --text-muted: #70757A;
+  --border-color: #DADCE0;
+  --border-strong: #C7C9CC;
+  --navy: #202124;
+  --navy-hover: #3C4043;
+  --teal: #1A73E8;
+  --teal-dark: #1558B0;
+  --teal-soft: #E8F0FE;
+  --route-color: #4285F4;
+  --danger: #D93025;
+  --danger-soft: #FCE8E6;
+  --shadow-small: 0 1px 4px rgba(60, 64, 67, 0.22);
+  --shadow-medium: 0 4px 12px rgba(60, 64, 67, 0.28);
+}
+body > aside { box-shadow: 2px 0 8px rgba(60, 64, 67, 0.12); }
+a { color: #1A73E8; }
+:focus-visible { outline-color: rgba(26, 115, 232, 0.45); }
+body > aside input:focus,
+body > aside select:focus {
+  border-color: #1A73E8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.16);
+}
+body > aside .primary-button,
+body > aside .primary-button:hover:not(:disabled),
+.laar-gate-marker.is-selected,
+.laar-gate-icon:hover .laar-gate-marker.is-selected {
+  background: #1A73E8;
+  border-color: #1A73E8;
+  color: #FFFFFF;
+}
+body > aside .primary-button:hover:not(:disabled) {
+  background: #1765CC;
+  border-color: #1765CC;
+}
+body > aside .primary-button:active:not(:disabled) {
+  background: #1558B0;
+  border-color: #1558B0;
+}
+.laar-gate-marker,
+.laar-gate-marker::after { background-color: #5F6368; }
+.laar-gate-icon:hover .laar-gate-marker,
+.laar-gate-icon:hover .laar-gate-marker::after { background-color: #3C4043; }
+.laar-gate-marker.is-selected::after,
+.laar-gate-icon:hover .laar-gate-marker.is-selected::after { background-color: #1A73E8; }
+.laar-gate-marker.is-selected,
+.laar-gate-icon:hover .laar-gate-marker.is-selected {
+  outline-color: rgba(26, 115, 232, 0.24);
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+}
+.route-summary { background: #F8F9FA; border-color: #DADCE0; }
+.summary-metrics > div { border-color: #E8EAED; }
+.metric-value { color: #1A73E8; }
+.map-legend {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: #DADCE0;
+  box-shadow: 0 1px 5px rgba(60, 64, 67, 0.24);
+  color: #202124;
+}
+.leaflet-bar,
+.leaflet-control-layers {
+  border-color: #DADCE0 !important;
+  box-shadow: 0 1px 4px rgba(60, 64, 67, 0.22) !important;
+}
+.leaflet-bar a { color: #202124; }
+.leaflet-bar a:hover { background: #F1F3F4; }
+.leaflet-control-scale-line { color: #5F6368; border-color: #5F6368; }
+.leaflet-control-attribution { color: #5F6368; }
+.laar-gate-card__header {
+  background: #F8F9FA;
+  color: #202124;
+  border-bottom: 1px solid #DADCE0;
+}
+.laar-gate-card__title { color: #202124; }
+.laar-gate-card__eyebrow { color: #1A73E8; }
+.laar-gate-popup a.leaflet-popup-close-button { color: #5F6368; }
+.laar-gate-popup a.leaflet-popup-close-button:hover { color: #202124; }
+
+
+/* Location and route tokens are defined once in the map palette above. */
+
+
+/* Definitive map canvas background — shared theme token. */
+#map {
+  background: var(--page-background);
+}
+
+/* ---------------------------------------------------------------------
+   23. Recenter control and live-location marker
+   --------------------------------------------------------------------- */
+/* High-visibility map recenter / live-location control */
+.leaflet-top.leaflet-right { z-index: 1200; }
+.leaflet-top.leaflet-right .leaflet-control { margin-top: 10px; margin-right: 14px; }
+.leaflet-top.leaflet-right .laar-recenter-control { margin-top: 10px; }
+.leaflet-control.laar-recenter-control {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: flex !important;
+  flex: 0 0 52px !important;
+  min-width: 52px !important;
+  min-height: 52px !important;
+  max-width: 52px !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  line-height: 1 !important;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 11px;
+  background: #1A73E8;
+  color: #FFFFFF;
+  border: 3px solid var(--map-location-outline);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(32, 33, 36, 0.42), 0 0 0 1px rgba(32, 33, 36, 0.18);
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.leaflet-control.laar-recenter-control:hover {
+  background: #1558B0;
+  box-shadow: 0 3px 10px rgba(32, 33, 36, 0.48), 0 0 0 2px rgba(26, 115, 232, 0.2);
+  transform: scale(1.04);
+}
+.leaflet-control.laar-recenter-control:active {
+  background: #174EA6;
+  transform: scale(0.97);
+}
+.leaflet-control.laar-recenter-control svg {
+  display: block !important;
+  flex: 0 0 27px;
+  width: 27px !important;
+  min-width: 27px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  overflow: visible;
+  stroke: currentColor;
+}
+.leaflet-control.laar-recenter-control:focus-visible {
+  outline: 3px solid #F9AB00;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-control.laar-recenter-control {
+    transition: none;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   24. Journey controls and direction guidance
+   --------------------------------------------------------------------- */
+/* LIVE JOURNEY OVERVIEW AND DIRECTION GUIDANCE */
+.journey-controls {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #DADCE0);
+}
+.journey-controls p {
+  color: var(--text-secondary, #5F6368);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.journey-controls button {
+  width: 100%;
+  margin-top: 8px;
+}
+.journey-guidance {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #E8F0FE;
+  border-radius: 10px;
+  color: #202124;
+}
+.journey-direction-arrow {
+  display: inline-flex;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #1A73E8;
+  color: #FFFFFF;
+  font-size: 30px;
+  transition: transform 180ms ease;
+}
+#journeyDirectionText {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+/* ---------------------------------------------------------------------
+   25. Journey prompts and mobile planner layout
+   --------------------------------------------------------------------- */
+/* Map-anchored live journey prompts: compact and positioned away from the
+   central route corridor. The route overview remains fully visible behind it. */
+.journey-controls {
+  position: fixed;
+  z-index: 1200;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(300px, calc(100vw - 36px));
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(48, 44, 40, 0.14);
+  border-radius: 13px;
+  box-shadow: 0 4px 18px rgba(25, 35, 45, 0.18);
+  backdrop-filter: blur(8px);
+}
+.journey-controls p {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.journey-controls button {
+  width: 100%;
+  min-height: 40px;
+  margin: 5px 0 0;
+}
+.journey-controls .primary-button {
+  margin-bottom: 0;
+}
+.journey-guidance {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--teal-soft);
+  border-radius: 9px;
+}
+.journey-direction-arrow {
+  display: inline-flex;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--teal);
+  color: white;
+  font-size: 26px;
+  transition: transform 180ms ease;
+}
+#journeyDirectionText {
+  font-size: 11px;
+  line-height: 1.35;
+}
+@media (max-width: 700px) {
+  .journey-controls {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(260px, calc(100vw - 24px));
+    padding: 10px;
+  }
+  .journey-controls p { font-size: 11px; }
+  .journey-controls button { min-height: 38px; }
+}
+
+
+/* Keep the mobile planner title and panel toggle pinned while the panel scrolls. */
+@media (max-width: 760px) {
+  body > aside .site-header {
+    position: sticky;
+    top: -12px;
+    z-index: 5;
+    margin-top: -12px;
+    padding-top: 12px;
+    background: var(--panel-background, #fff);
+    box-shadow: 0 8px 10px -10px rgba(48, 44, 40, 0.35);
+  }
+
+  body > aside .site-header h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  body > aside .mobile-panel-toggle {
+    position: relative;
+    z-index: 6;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  body > aside.mobile-panel-collapsed .site-header {
+    box-shadow: none;
+  }
+}
+
+
+/* Crisp, flat 2D live-location marker: bold arrow plus high-contrast position dot. */
+.laar-live-heading-marker {
+  width: 32px !important;
+  height: 42px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  transform-origin: 50% 22px;
+  transform: rotate(var(--laar-route-bearing, 0deg));
+  overflow: visible !important;
+  pointer-events: auto;
+}
+.laar-live-heading-core {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  display: block;
+  transform: translate(-50%, -50%);
+  border: 3px solid var(--map-location-outline);
+  border-radius: 50%;
+  background: #1769FF;
+  box-shadow: 0 0 0 1.5px #1249A8;
+}
+.laar-live-heading-arrow {
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  width: 23px;
+  height: 24px;
+  transform: translateX(-50%);
+  background: #1769FF;
+  clip-path: polygon(50% 0, 100% 92%, 50% 72%, 0 92%);
+  filter: drop-shadow(0 1px 0 #FFFFFF) drop-shadow(0 1px 1px rgba(0,0,0,.35));
+}
+.laar-live-heading-arrow::after {
+  content: "";
+  position: absolute;
+  inset: 3px 5px 7px;
+  background: #FFFFFF;
+  opacity: .95;
+  clip-path: polygon(50% 0, 100% 92%, 50% 72%, 0 92%);
+}
+.journey-guidance .journey-direction-arrow,
+#journeyDirectionText { display: none !important; }
+.journey-guidance { padding: 8px 10px; }
+
+
+/* On phones, never let the floating journey card cover the route planner.
+   Show it when the planner is collapsed so the map can be used unobstructed. */
+@media (max-width: 760px) {
+  body:has(#navigationPanel:not(.mobile-panel-collapsed)) .journey-controls {
+    display: none !important;
+  }
+
+  body:has(#navigationPanel.mobile-panel-collapsed) .journey-controls {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(250px, calc(100vw - 24px));
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   26. Live-routing controls and journey panels
+   --------------------------------------------------------------------- */
+/* Live-routing controls: clear actions, accessible tap targets, and no overlap. */
+.journey-controls[hidden],
+.journey-controls button[hidden] { display: none !important; }
+.journey-controls {
+  box-sizing: border-box;
+  width: min(288px, calc(100vw - 32px));
+  padding: 13px;
+  color: var(--text-primary, #202124);
+}
+.journey-stage {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.journey-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+.journey-controls .journey-actions button {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.journey-controls .stop-routing-button {
+  background: #FFFFFF;
+  color: #B3261E;
+  border: 1px solid #DADCE0;
+}
+.journey-controls .stop-routing-button:hover:not(:disabled) {
+  background: #FCE8E6;
+  border-color: #D93025;
+}
+
+@media (max-width: 760px) {
+  /* The map card only appears while the planner is collapsed. */
+  body:has(#navigationPanel:not(.mobile-panel-collapsed)) .journey-controls {
+    display: none !important;
+  }
+  body:has(#navigationPanel.mobile-panel-collapsed) .journey-controls {
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(250px, calc(100vw - 24px));
+    max-height: min(48vh, 360px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+
+/* Refined live-location icon: a crisp heading arrow, strong position dot,
+   and subtle halo for contrast on pale or detailed map backgrounds. */
+.laar-live-heading-marker {
+  width: 36px !important;
+  height: 44px !important;
+  transform-origin: 50% 22px;
+  transform: rotate(var(--laar-live-heading, 0deg));
+}
+.laar-live-heading-marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 13px;
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(26, 115, 232, 0.26);
+  border-radius: 50%;
+  background: rgba(26, 115, 232, 0.12);
+}
+.laar-live-heading-core {
+  top: 22px;
+  width: 17px;
+  height: 17px;
+  border: 3px solid var(--map-location-outline);
+  background: #1A73E8;
+  box-shadow: 0 0 0 1.5px #174EA6, 0 1px 4px rgba(32, 33, 36, 0.35);
+}
+.laar-live-heading-arrow {
+  top: 0;
+  width: 26px;
+  height: 27px;
+  background: #1A73E8;
+  clip-path: polygon(50% 0, 96% 92%, 50% 73%, 4% 92%);
+  filter: drop-shadow(0 1px 1px rgba(32, 33, 36, 0.42));
+}
+.laar-live-heading-arrow::after {
+  inset: 4px 8px 8px;
+  background: #FFFFFF;
+  clip-path: polygon(50% 0, 100% 92%, 50% 72%, 0 92%);
+}
+
+
+/* Mobile live-routing panel must layer above the LAAR navigation sheet. */
+@media (max-width: 760px) {
+  body > #journeyControls.journey-controls {
+    display: block !important;
+    position: fixed;
+    z-index: 1400;
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(250px, calc(100vw - 24px));
+    max-height: min(48vh, 360px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   27. Mobile map stacking and touch behavior
+   --------------------------------------------------------------------- */
+/* Mobile: reserve pinch-zoom for the map, not the UI panels.
+   Vertical scrolling and normal control interaction remain available. */
+@media (max-width: 760px) {
+  body > aside,
+  body > #journeyControls.journey-controls {
+    touch-action: pan-y;
+    -ms-touch-action: pan-y;
+  }
+
+  body > aside button,
+  body > aside input,
+  body > aside select,
+  body > aside textarea,
+  body > #journeyControls button {
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+  }
+}
+
+
+/* iOS/Safari and mobile browsers: block multi-touch zoom gestures on panels only. */
+@media (max-width: 760px) {
+  body > aside,
+  body > #journeyControls.journey-controls {
+    touch-action: pan-y !important;
+    -ms-touch-action: pan-y !important;
+  }
+}
+
+
+/* Mobile stacking: keep the live-routing card beneath Leaflet's layer/key
+   controls and never over the expanded LAAR navigation panel. */
+@media (max-width: 760px) {
+  body > #journeyControls.journey-controls {
+    z-index: 500 !important;
+  }
+
+  body:has(#navigationPanel:not(.mobile-panel-collapsed)) > #journeyControls.journey-controls {
+    display: none !important;
+  }
+
+  body:has(#navigationPanel.mobile-panel-collapsed) > #journeyControls.journey-controls {
+    display: block;
+  }
+}
+
+
+/* Final mobile stacking rules: Leaflet layer/map-key controls stay above the
+   live-routing card; the LAAR planner stays above the card when expanded. */
+@media (max-width: 760px) {
+  body > #journeyControls.journey-controls {
+    z-index: 500 !important;
+  }
+
+  body > #journeyControls.journey-controls[hidden] {
+    display: none !important;
+  }
+
+  body:has(#navigationPanel:not(.mobile-panel-collapsed)) > #journeyControls.journey-controls {
+    display: none !important;
+  }
+
+  body:has(#navigationPanel.mobile-panel-collapsed) > #journeyControls.journey-controls:not([hidden]) {
+    display: block !important;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   28. Mobile live-route launcher and map controls
+   --------------------------------------------------------------------- */
+/* Mobile live-routing popup with a persistent, identifiable map-pin launcher. */
+
+@media (max-width: 760px) {
+  
+  
+  
+  body > #journeyControls.journey-controls {
+    display: none !important;
+    position: fixed;
+    z-index: 1050 !important;
+    top: calc(max(14px, env(safe-area-inset-top)) + 56px);
+    right: max(14px, env(safe-area-inset-right));
+    bottom: auto;
+    left: auto;
+    width: min(290px, calc(100vw - 28px));
+    max-height: min(58vh, 440px);
+    overflow-y: auto;
+    border: 1px solid #d7dedb;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    overscroll-behavior: contain;
+  }
+  body > #journeyControls.journey-controls.mobile-popup-open:not([hidden]) {
+    display: block !important;
+  }
+  body > #journeyControls.journey-controls[hidden] {
+    display: none !important;
+  }
+}
+
+
+/* Mobile: place the recenter control on the left, directly beneath zoom. */
+@media (max-width: 760px) {
+  .leaflet-top.leaflet-left .leaflet-control-zoom {
+    margin-top: max(12px, env(safe-area-inset-top));
+    margin-left: max(12px, env(safe-area-inset-left));
+  }
+  .leaflet-top.leaflet-left .laar-recenter-control {
+    margin-top: 8px !important;
+    margin-left: max(12px, env(safe-area-inset-left)) !important;
+  }
+  .leaflet-top.leaflet-right .laar-recenter-control {
+    margin-top: 0 !important;
+  }
+}
+
+
+/* iOS double-tap protection: disable double-tap page zoom while preserving
+   normal single taps and Leaflet's map zoom controls/gestures. */
+@media (max-width: 760px) {
+  html, body {
+    touch-action: manipulation;
+  }
+  #map, #map .leaflet-container, #map .leaflet-interactive {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+  body > #journeyPopupToggle,
+  body > #journeyControls,
+  body > aside {
+    touch-action: manipulation;
+  }
+}
+
+
+/* Final mobile map-control placement: live route below the layers control,
+   and recenter in Leaflet's left control stack directly below zoom. */
+@media (max-width: 760px) {
+  
+
+  .leaflet-top.leaflet-left .leaflet-control-zoom {
+    margin-top: max(12px, env(safe-area-inset-top)) !important;
+    margin-left: max(12px, env(safe-area-inset-left)) !important;
+    margin-bottom: 0 !important;
+  }
+
+  .leaflet-top.leaflet-left .laar-recenter-control {
+    margin-top: 8px !important;
+    margin-left: max(12px, env(safe-area-inset-left)) !important;
+  }
+
+  .leaflet-top.leaflet-right .laar-recenter-control {
+    display: none !important;
+  }
+}
+
+
+/* Final mobile live-route placement: keep launcher and popup below the
+   top-right Leaflet layers control instead of sharing its vertical space. */
+@media (max-width: 760px) {
+  
+
+  body > #journeyControls.journey-controls {
+    top: calc(max(12px, env(safe-area-inset-top)) + 108px) !important;
+    right: max(12px, env(safe-area-inset-right)) !important;
+  }
+}
+
+
+/* Hide the route summary card entirely; routing and map rendering remain active. */
+#routeSummary,
+.route-summary {
+  display: none !important;
+}
+
+
+/* ---------------------------------------------------------------------
+   29. Destination picker and radio groups
+   --------------------------------------------------------------------- */
+/* Navigation panel radio groups */
+.radio-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.radio-options legend.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.radio-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--line, #d8d0c4);
+  border-radius: 999px;
+  background: var(--paper, #fff);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.radio-options input[type="radio"] {
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--teal);
+}
+.radio-options label:has(input:checked) {
+  border-color: var(--teal);
+  background: var(--sand, #f2eee5);
+}
+#destinationSearch,
+#end {
+  width: 100%;
+  box-sizing: border-box;
+}
+.control-section > label[for="start"],
+.control-section > label[for="destinationSearch"],
+.control-section > label[for="end"] {
+  display: block;
+  margin: 8px 0 5px;
+}
+@media (max-width: 480px) {
+  .radio-options { gap: 6px; }
+  .radio-options label { padding: 5px 7px; font-size: 11px; }
+}
+
+
+/* ---------------------------------------------------------------------
+   30. Gate icon and map-key overrides
+   --------------------------------------------------------------------- */
+/* Final gate-icon overrides: keep the guard and map key light in every theme. */
+.leaflet-container .laar-gate-marker,
+.leaflet-container .laar-gate-icon:hover .laar-gate-marker,
+.leaflet-container .laar-gate-marker.is-selected,
+.leaflet-container .laar-gate-icon:hover .laar-gate-marker.is-selected {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #D5E1E9 !important;
+  border-radius: 50% !important;
+  color: #F28C28 !important;
+  outline: none !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12) !important;
+}
+.leaflet-container .laar-gate-marker::after,
+.leaflet-container .laar-gate-marker.is-selected::after {
+  content: none !important;
+  display: none !important;
+}
+.leaflet-container .security-guard-symbol__head,
+.leaflet-container .security-guard-symbol__cap,
+.leaflet-container .security-guard-symbol__body {
+  fill: #F28C28 !important;
+}
+.leaflet-container .security-guard-symbol__badge {
+  fill: #FFFFFF !important;
+}
+.leaflet-container .leaflet-tooltip.laar-gate-label {
+  margin-top: 0 !important;
+  padding: 5px 9px !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  color: var(--navy) !important;
+  border: 1px solid #D5E1E9 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12) !important;
+}
+.leaflet-container .leaflet-tooltip-bottom.laar-gate-label::before {
+  border-bottom-color: #D5E1E9 !important;
+}
+.map-legend .legend-gate,
+.map-legend .legend-gate.legend-gate--selected {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #D5E1E9 !important;
+  border-radius: 50% !important;
+  outline: none !important;
+  box-shadow: 0 2px 7px rgba(21, 43, 66, 0.12) !important;
+}
+
+
+/* Final gate marker sizing and compact gate labels. */
+.leaflet-container .laar-gate-marker {
+  width: 33px !important;
+  height: 33px !important;
+}
+.leaflet-container .leaflet-tooltip.laar-gate-label {
+  padding: 2.5px 4.5px !important;
+}
+.map-legend .legend-gate .security-guard-symbol {
+  width: 75% !important;
+  height: 75% !important;
+}
+
+
+/* Gate labels now sit above the marker, centered with minimal separation. */
+.leaflet-container .leaflet-tooltip-top.laar-gate-label::before {
+  border-top-color: #D5E1E9 !important;
+}
+
+
+/* Compact vertical rhythm for map-key entries. */
+.map-legend__row {
+  min-height: 22px;
+  margin-bottom: 3px;
+  line-height: 1.25;
+}
+.map-legend__title {
+  margin-bottom: 6px;
+}
+
+
+/* Remove the obsolete road-visibility note from the map key. */
+
+
+/* Map-key-only major road sample mirrors the map casing (6px) and road line (4px). */
+.map-legend .map-key-major-road {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 6px;
+  background: var(--map-major-road-outline);
+}
+.map-legend .map-key-major-road > span {
+  display: block;
+  width: 100%;
+  height: 4px;
+  background: var(--map-major-road);
+}
+
+
+/* Align map-key symbols in a fixed centered column; labels share a left edge. */
+.map-legend .map-legend__content .map-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.map-legend .map-legend__content .map-legend__row > span:first-child {
+  flex: 0 0 30px;
+  width: 30px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-legend .map-legend__content .map-legend__row > span:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+
+/* Keep the location dot at its original size while centering it in the icon column. */
+.map-legend .map-legend__content .map-legend__row > .legend-location {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+}
+.map-legend .map-legend__content .map-legend__row > .legend-location::before {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 16px;
+  box-sizing: content-box;
+  background: var(--map-location);
+  border: 3px solid var(--map-location-outline);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--map-location) 30%, transparent);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+
+/* ---------------------------------------------------------------------
+   31. Map loading overlay and animation
+   --------------------------------------------------------------------- */
+/* Initial application loading overlay. */
+.map-loading-dialog {
+  position: fixed;
+  z-index: 10000;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 190px;
+  padding: 16px 20px;
+  color: #243447;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #d7dde5;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(20, 35, 50, 0.18);
+  font-size: 15px;
+  font-weight: 600;
+  transform: translate(-50%, -50%);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 350ms ease, visibility 350ms ease;
+}
+.map-loading-dialog.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.map-loading-dialog__spinner {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border: 2px solid #d5dce5;
+  border-top-color: #7189a8;
+  border-radius: 50%;
+  animation: map-loading-spin 800ms linear infinite;
+}
+@keyframes map-loading-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-loading-dialog,
+  .map-loading-dialog__spinner {
+    transition: none;
+    animation: none;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   32. Live-routing panel, header controls and diagnostics
+   --------------------------------------------------------------------- */
+/* Compact live-routing panel: fixed title, small Start/Stop controls. */
+body > #journeyControls.journey-controls {
+  left: auto !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  top: auto !important;
+  width: 154px !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: none !important;
+  padding: 7px 8px !important;
+  border-radius: 8px !important;
+  gap: 5px !important;
+  text-align: center !important;
+}
+#journeyControls .journey-stage {
+  margin: 0 0 5px !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+}
+#journeyControls .journey-actions {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+#journeyControls .journey-actions button {
+  min-width: 0 !important;
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  border-radius: 5px !important;
+}
+#journeyControls #startLiveRoute {
+  background: #218739 !important;
+  border-color: #1b702f !important;
+  color: #fff !important;
+}
+#journeyControls #stopLiveRoute {
+  background: #c62828 !important;
+  border-color: #a91f1f !important;
+  color: #fff !important;
+}
+
+@media (max-width: 760px) {
+  /* Keep live-routing controls out of the way while destination selection is open. */
+  
+  body > #journeyControls.journey-controls,
+  body:has(#navigationPanel:not(.mobile-panel-collapsed)) > #journeyControls.journey-controls {
+    display: none !important;
+  }
+  body:has(#navigationPanel.mobile-panel-collapsed) > #journeyControls.journey-controls:not([hidden]) {
+    display: block !important;
+    position: fixed !important;
+    left: max(0px, env(safe-area-inset-left)) !important;
+    right: max(0px, env(safe-area-inset-right)) !important;
+    bottom: max(0px, env(safe-area-inset-bottom)) !important;
+    top: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 35vh !important;
+    margin: 0 !important;
+    padding: 8px 12px !important;
+    border-radius: 10px 10px 0 0 !important;
+  }
+  body > #journeyControls.journey-controls[hidden] {
+    display: none !important;
+  }
+}
+
+
+/* Keep the desktop live-routing panel compact while tracking is active. */
+@media (min-width: 761px) {
+  body > #journeyControls.journey-controls #journeyGuidance {
+    display: none !important;
+  }
+}
+
+/* Header controls: planner visibility and live-route start/stop. */
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.header-actions .mobile-panel-toggle,
+.header-actions .live-route-toggle {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #1a73e8;
+  border-radius: 8px;
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.header-actions .live-route-toggle {
+  border-color: #218739;
+  background: #218739;
+}
+.header-actions .live-route-toggle.is-stop {
+  border-color: #c62828;
+  background: #c62828;
+}
+.header-actions .live-route-toggle:disabled {
+  border-color: #aeb4bb;
+  background: #d9dde2;
+  color: #646b73;
+  cursor: not-allowed;
+  opacity: 1;
+}
+@media (max-width: 760px) {
+  body > aside .site-header { gap: 8px; }
+  .header-actions { gap: 5px; }
+  .header-actions .mobile-panel-toggle,
+  .header-actions .live-route-toggle { padding: 7px 9px; font-size: 12px; }
+  body > #journeyControls.journey-controls { display: none !important; }
+}
+
+/* Keep the desktop header unchanged; these paired controls are for the mobile sheet. */
+@media (min-width: 761px) {
+  .header-actions { display: contents; }
+  .header-actions .live-route-toggle { display: none; }
+}
+
+/* Keep the paired header controls aligned and identical in size. */
+.header-actions .mobile-panel-toggle,
+.header-actions .live-route-toggle {
+  box-sizing: border-box;
+  width: 112px;
+  min-width: 112px;
+  height: 38px;
+  min-height: 38px;
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+}
+.header-actions .mobile-panel-toggle:disabled {
+  opacity: 1;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .header-actions .mobile-panel-toggle,
+  .header-actions .live-route-toggle {
+    width: 112px;
+    min-width: 112px;
+    height: 38px;
+    min-height: 38px;
+    font-size: 12px;
+  }
+}
+
+/* The menu toggle is always enabled and blue, regardless of generic disabled-button styles. */
+#panelToggle.mobile-panel-toggle,
+#panelToggle.mobile-panel-toggle:disabled,
+#panelToggle.mobile-panel-toggle:disabled:hover,
+#panelToggle.mobile-panel-toggle:disabled:active {
+  background: #1a73e8 !important;
+  border-color: #1a73e8 !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+
+/* Native mobile select menus can flicker inside transformed fixed panels.
+   Collapse the planner by clipping its height instead of translating it. */
+@media (max-width: 760px) {
+  body > #navigationPanel {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto !important;
+    backface-visibility: visible !important;
+  }
+  body > #navigationPanel.mobile-panel-collapsed {
+    transform: none !important;
+    height: 76px !important;
+    min-height: 76px !important;
+    max-height: 76px !important;
+    overflow: hidden !important;
+    transition: none !important;
+  }
+  body > #navigationPanel:not(.mobile-panel-collapsed) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 84vh !important;
+    max-height: 84dvh !important;
+    overflow-y: auto !important;
+  }
+}
+
+
+/* Compact destination filter controls and floating filter panel. */
+.destination-filter-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:4px 0 7px; }
+.contractor-filter-trigger { display:inline-flex; align-items:center; gap:5px; cursor:pointer; font-size:12px; line-height:1.2; }
+.contractor-filter-trigger input { width:13px; height:13px; margin:0; }
+.destination-filter-clear { padding:3px 7px; font-size:11px; line-height:1.2; }
+.destination-filter-clear:disabled { opacity:.45; cursor:default; }
+.contractor-filter-wrap { position:relative; margin:0; }
+.contractor-filter-dialog {
+  position:absolute; z-index:1600; top:calc(100% + 4px); left:0;
+  width:min(340px, calc(100vw - 36px)); max-height:min(68vh, 460px);
+  display:flex; flex-direction:column; padding:9px;
+  border:1px solid var(--border-color, #b8bec5); border-radius:8px;
+  background:var(--panel-background, #fff); color:var(--text-color, #222);
+  box-shadow:0 6px 20px rgba(0,0,0,.2);
+}
+.contractor-filter-dialog[hidden] { display:none !important; }
+.contractor-filter-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; }
+.contractor-filter-heading button { border:0; background:transparent; color:inherit; font-size:19px; line-height:1; padding:0 5px; }
+.destination-filter-groups { display:grid; grid-template-columns:1fr; gap:2px !important; min-height:0; overflow-y:auto; margin-top:3px; }
+.destination-filter-group { min-width:0; margin:0 !important; padding:2px 5px 3px; border:1px solid var(--border-color, #e2e5e8); border-radius:6px; }
+.destination-filter-group legend { padding:0 3px; font-size:11px; font-weight:700; line-height:12px; }
+.contractor-filter-options { display:grid; grid-template-columns:minmax(0,1fr); gap:0 !important; row-gap:0 !important; max-height:120px; overflow-y:auto; }
+.contractor-filter-options > .contractor-filter-option { box-sizing:border-box; display:flex !important; align-items:center; gap:4px; width:100%; min-width:0; min-height:13px !important; height:13px; margin:0 !important; padding:0 !important; font-size:11px; line-height:12px !important; cursor:pointer; }
+.contractor-filter-option span { display:block; overflow-wrap:anywhere; line-height:12px !important; }
+.contractor-filter-options > .contractor-filter-option input { flex:0 0 12px; width:12px; height:12px; margin:0 !important; padding:0; }
+
+/* Custom destination picker avoids native mobile select popover/repaint issues. */
+#end[aria-hidden="true"] { display: none !important; }
+.destination-picker-toggle {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border-color, #b8bec5);
+  border-radius: 8px;
+  background: var(--panel-background, #fff);
+  color: var(--text-color, #222);
+  font: inherit;
+  cursor: pointer;
+}
+.destination-picker-toggle::after {
+  content: "▾";
+  float: right;
+  margin-left: 10px;
+}
+.destination-picker-toggle:disabled { opacity: .55; cursor: not-allowed; }
+.destination-picker-list {
+  margin-top: 5px;
+  max-height: 34vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-color, #b8bec5);
+  border-radius: 8px;
+  background: var(--panel-background, #fff);
+  box-shadow: 0 4px 14px rgba(0,0,0,.12);
+}
+.destination-picker-list[hidden] { display: none !important; }
+.destination-picker-option {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color, #e2e5e8);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-color, #222);
+  text-align: left;
+  font: inherit;
+  line-height: 1.3;
+}
+.destination-picker-option:last-child { border-bottom: 0; }
+.destination-picker-option[aria-selected="true"] { background: rgba(26,115,232,.12); font-weight: 700; }
+.destination-picker-option:active { background: rgba(26,115,232,.2); }
+.destination-picker-empty { margin: 0; padding: 12px; color: var(--muted-text-color, #666); }
+
+
+/* Retire the legacy floating live-routing dialog on mobile; header controls replace it. */
+@media (max-width: 760px) {
+  body > #journeyControls.journey-controls,
+  body > #journeyControls.journey-controls:not([hidden]),
+  body > #journeyControls.journey-controls[hidden] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+
+/* Start keeps the same green appearance when disabled; disabled affects clicks only. */
+.header-actions .live-route-toggle:not(.is-stop),
+.header-actions .live-route-toggle:not(.is-stop):disabled,
+.header-actions .live-route-toggle:not(.is-stop):disabled:hover,
+.header-actions .live-route-toggle:not(.is-stop):disabled:active {
+  background: #218739 !important;
+  border-color: #218739 !important;
+  color: #fff !important;
+  opacity: 1 !important;
+}
+.header-actions .live-route-toggle.is-stop,
+.header-actions .live-route-toggle.is-stop:disabled {
+  background: #c62828 !important;
+  border-color: #c62828 !important;
+  color: #fff !important;
+  opacity: 1 !important;
+}
+
+
+/* Separate each primary navigation section consistently, as in Share. */
+#navigationPanel > .control-section {
+  padding-top: 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+
+/* Header menu and live-route buttons are mobile-only controls. */
+@media (min-width: 761px) {
+  .header-actions .mobile-panel-toggle,
+  .header-actions .live-route-toggle {
+    display: none !important;
+  }
+}
+
+
+/* Destination reachability diagnostics within Development Features. */
+.diagnostics-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+.diagnostics-section h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+.unreachable-destinations {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.unreachable-destinations li {
+  margin: 0 0 4px;
+}
+
+
+/* Map-loading timing output in Development Features diagnostics. */
+.map-load-heading {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+}
+.map-load-timings {
+  margin: 6px 0 0;
+  padding-left: 22px;
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.map-load-timings li {
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ---------------------------------------------------------------------
+   33. Vehicle type selector and responsive tiles
+   --------------------------------------------------------------------- */
+/* Vehicle type selector: compact icon tiles with labels underneath. */
+.vehicle-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+.vehicle-options label {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 64px;
+  margin: 0;
+  padding: 6px 3px 5px;
+  border: 1px solid #d8dfe7;
+  border-radius: 8px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.vehicle-options label:has(input:checked) {
+  background: #d5e8fb;
+  border-color: #6b9fd0;
+  color: #111;
+  box-shadow: inset 0 0 0 1px rgba(66, 133, 244, 0.12);
+}
+.vehicle-options label:hover {
+  background: #edf5fc;
+  border-color: #9bbfe0;
+}
+.vehicle-options label:has(input:checked):hover {
+  background: #c9e1f8;
+  border-color: #548fc7;
+}
+.vehicle-options input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.vehicle-options label:focus-within {
+  outline: 2px solid #8aa9c2;
+  outline-offset: 2px;
+}
+.vehicle-options .vehicle-icon {
+  display: block;
+  width: 38px;
+  height: 27px;
+  margin: 0;
+  color: #111;
+  flex: 0 0 auto;
+}
+.vehicle-options .vehicle-label {
+  display: block;
+  margin: 0;
+  color: #303841;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+}
+@media (max-width: 480px) {
+  .vehicle-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .vehicle-options label {
+    min-height: 60px;
+    padding: 5px 2px 4px;
+  }
+  .vehicle-options .vehicle-icon {
+    width: 34px;
+    height: 25px;
+  }
+  .vehicle-options .vehicle-label {
+    font-size: 9px;
+  }
+}
+
+
+/* Vehicle updates use the same centered placement as initial map loading. */
+.vehicle-routing-update-dialog {
+  z-index: 10001;
+}
+.vehicle-routing-update-dialog[hidden] {
+  display: none;
+}
+
+
+
+
+
+/* Definitive road symbols for the map legend.
+   Each sample uses the same palette tokens as its corresponding map layer. */
+.map-legend .map-key-road {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 6px;
+  box-sizing: border-box;
+  background: var(--map-road-outline);
+}
+.map-legend .map-key-road > span {
+  display: block;
+  width: 100%;
+  height: 4px;
+}
+.map-legend .map-key-major-road {
+  background: var(--map-major-road-outline);
+}
+.map-legend .map-key-major-road > span {
+  background: var(--map-major-road);
+}
+.map-legend .map-key-local-road > span {
+  background: var(--map-public-road);
+}
+.map-legend .map-key-haul-road > span {
+  background: var(--map-haul-road);
+}
+
+
+/* Definitive legend symbols — direct rows used by addMapLegend().
+   These selectors intentionally support the current markup without requiring
+   a .map-legend__content wrapper. */
+.map-legend > .map-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.map-legend > .map-legend__row > span:first-child {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-legend > .map-legend__row > span:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Road samples share the same palette as the rendered road layers. */
+.map-legend > .map-legend__row > .map-key-road {
+  height: 6px;
+  background: var(--map-road-outline);
+}
+.map-legend > .map-legend__row > .map-key-road > span {
+  width: 100%;
+  height: 4px;
+  display: block;
+}
+.map-legend > .map-legend__row > .map-key-major-road > span {
+  background: var(--map-major-road);
+}
+.map-legend > .map-legend__row > .map-key-local-road > span {
+  background: var(--map-public-road);
+}
+.map-legend > .map-legend__row > .map-key-haul-road > span {
+  background: var(--map-haul-road);
+}
+
+/* Destination, route and live-location symbols. */
+.map-legend > .map-legend__row > .legend-area {
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+  height: 18px;
+  display: block;
+  background: color-mix(in srgb, var(--map-area-fill) var(--map-area-fill-opacity), transparent);
+  border: 2px solid var(--map-area-outline);
+  border-radius: 4px;
+}
+.map-legend > .map-legend__row > .legend-route {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 5px;
+  display: block;
+  background: var(--map-route);
+  border-radius: 4px;
+}
+.map-legend > .map-legend__row > .legend-location {
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+}
+.map-legend > .map-legend__row > .legend-location::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  display: block;
+  box-sizing: content-box;
+  background: var(--map-location);
+  border: 3px solid var(--map-location-outline);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--map-location) 30%, transparent);
+}
+
+
+
+/* Map-key symbol rendering — explicit rules for the current addMapLegend markup.
+   !important prevents older theme overrides from suppressing the samples. */
+.map-legend .legend-symbol-main-road,
+.map-legend .legend-symbol-minor-road,
+.map-legend .legend-symbol-haul-road {
+  display: inline-flex !important;
+  flex: 0 0 30px !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 6px !important;
+  min-height: 6px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.map-legend .legend-symbol-main-road {
+  background: var(--map-major-road-outline, #7189A8) !important;
+}
+.map-legend .legend-symbol-minor-road,
+.map-legend .legend-symbol-haul-road {
+  background: var(--map-road-outline, #C5C9CE) !important;
+}
+.map-legend .legend-symbol-main-road > span,
+.map-legend .legend-symbol-minor-road > span,
+.map-legend .legend-symbol-haul-road > span {
+  display: block !important;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  height: 4px !important;
+  min-height: 4px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.map-legend .legend-symbol-main-road > span {
+  background: var(--map-major-road, #92A9C6) !important;
+}
+.map-legend .legend-symbol-minor-road > span {
+  background: var(--map-public-road, #FFFFFF) !important;
+}
+.map-legend .legend-symbol-haul-road > span {
+  background: var(--map-haul-road, #F28C28) !important;
+}
+.map-legend .legend-symbol-destination {
+  display: inline-block !important;
+  flex: 0 0 26px !important;
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  box-sizing: border-box !important;
+  background: color-mix(in srgb, var(--map-area-fill, #8AB4F8) 30%, transparent) !important;
+  border: 2px solid var(--map-area-outline, #1A73E8) !important;
+  border-radius: 4px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.map-legend .legend-symbol-route {
+  display: inline-block !important;
+  flex: 0 0 30px !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 5px !important;
+  min-height: 5px !important;
+  box-sizing: border-box !important;
+  background: var(--map-route, #4285F4) !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+
+/* Map key SVG symbols use explicit geometry and colors matching map layers. */
+.map-legend .map-key-svg {
+  display: block !important;
+  flex: 0 0 30px !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  height: auto !important;
+  overflow: visible !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.map-legend .map-key-destination {
+  height: 20px !important;
+}
+
+
+
+
+/* Previously identified unused styles, retained and disabled for review. */
+/*
+
+/* Unused selectors: .eyebrow; .network-date; .vehicle-barrier; .vehicle-barrier > span; .vehicle-barrier__ground; .vehicle-barrier__cabinet; .vehicle-barrier__cabinet::before; .vehicle-barrier__cabinet::after; .vehicle-barrier__arm; .vehicle-barrier__support; .vehicle-barrier__support::before; .laar-gate-card__badge; .laar-gate-card__badge--valid; .laar-gate-card__badge--invalid; .eyebrow; .network-date; .diriyah-swatch--major; .eyebrow; .diriyah-swatch--main, .diriyah-swatch--major; .diriyah-swatch--public; .journey-footnote; .journey-popup-toggle; #journeyControls .journey-footnote * /
+.eyebrow {
+  display: block;
+  margin-bottom: 7px;
+
+  color: var(--teal);
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  line-height: 1.4;
+}
+
+.network-date {
+  display: inline-block;
+
+  max-width: 100%;
+  padding: 6px 9px;
+
+  background: #f3f6f9;
+  color: var(--text-secondary);
+
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  overflow-wrap: anywhere;
+}
+
+.vehicle-barrier {
+  position: relative;
+
+  display: block;
+  flex: 0 0 auto;
+
+  width: 30px;
+  height: 26px;
+
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  pointer-events: none;
+}
+
+.vehicle-barrier > span {
+  position: absolute;
+  display: block;
+
+  margin: 0;
+  padding: 0;
+
+  box-sizing: border-box;
+}
+
+.vehicle-barrier__ground {
+  left: 1px;
+  bottom: 2px;
+
+  width: 28px;
+  height: 2px;
+
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.vehicle-barrier__cabinet {
+  z-index: 2;
+
+  left: 3px;
+  bottom: 4px;
+
+  width: 8px;
+  height: 15px;
+
+  background: #ffffff;
+  border-radius: 2px 2px 1px 1px;
+}
+
+.vehicle-barrier__cabinet::before {
+  content: "";
+
+  position: absolute;
+  top: 4px;
+  left: 2px;
+
+  display: block;
+
+  width: 4px;
+  height: 3px;
+
+  background: #43c7ee;
+  border-radius: 1px;
+}
+
+.vehicle-barrier__cabinet::after {
+  content: "";
+
+  position: absolute;
+  left: 2px;
+  bottom: 3px;
+
+  display: block;
+
+  width: 4px;
+  height: 1px;
+
+  background: #9aafbd;
+}
+
+.vehicle-barrier__arm {
+  z-index: 3;
+
+  left: 7px;
+  top: 7px;
+
+  width: 22px;
+  height: 4px;
+
+  background-color: #ffffff;
+  background-image: repeating-linear-gradient(
+    115deg,
+    #ffffff 0,
+    #ffffff 4px,
+    #ed5a5a 4px,
+    #ed5a5a 7px
+  );
+
+  border-radius: 1px;
+}
+
+.vehicle-barrier__support {
+  z-index: 1;
+
+  right: 3px;
+  bottom: 4px;
+
+  width: 3px;
+  height: 11px;
+
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.vehicle-barrier__support::before {
+  content: "";
+
+  position: absolute;
+  top: 0;
+  left: -1px;
+
+  display: block;
+
+  width: 5px;
+  height: 2px;
+
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.laar-gate-card__badge {
+  display: inline-block;
+
+  max-width: 100%;
+  margin-bottom: 13px;
+  padding: 5px 8px;
+
+  border-radius: 5px;
+
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.laar-gate-card__badge--valid {
+  background: var(--teal-soft);
+  color: var(--teal-dark);
+}
+
+.laar-gate-card__badge--invalid {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.eyebrow {
+  color: var(--earth-outline);
+
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.network-date {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.eyebrow {
+  color: var(--public-road);
+  letter-spacing: 0.09em;
+}
+
+.journey-footnote {
+  margin-top: 8px;
+  color: var(--text-secondary, #5F6368);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.journey-popup-toggle { display: none; }
+
+#journeyControls .journey-footnote {
+  display: none !important;
+}
+
+/* Unused selectors: body > #journeyPopupToggle.journey-popup-toggle; #journeyPopupToggle svg; body > #journeyPopupToggle.journey-popup-toggle.is-open; body > #journeyPopupToggle.journey-popup-toggle; body > #journeyPopupToggle.journey-popup-toggle; body > #journeyPopupToggle.journey-popup-toggle * /
+@media (max-width: 760px) {
+  body > #journeyPopupToggle.journey-popup-toggle {
+      position: fixed;
+      z-index: 1100;
+      top: max(14px, env(safe-area-inset-top));
+      right: max(14px, env(safe-area-inset-right));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 46px;
+      padding: 9px 13px;
+      border: 1px solid #244f46;
+      border-radius: 999px;
+      background: #32665B;
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(0,0,0,.24);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+    }
+  
+  #journeyPopupToggle svg {
+      display: block;
+      width: 21px;
+      height: 21px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  
+  body > #journeyPopupToggle.journey-popup-toggle.is-open {
+      background: #254F46;
+    }
+  
+  body > #journeyPopupToggle.journey-popup-toggle {
+      top: calc(max(12px, env(safe-area-inset-top)) + 58px);
+      right: max(12px, env(safe-area-inset-right));
+    }
+  
+  body > #journeyPopupToggle.journey-popup-toggle {
+      top: calc(max(12px, env(safe-area-inset-top)) + 52px) !important;
+      right: max(12px, env(safe-area-inset-right)) !important;
+    }
+  
+  body > #journeyPopupToggle.journey-popup-toggle {
+      display: none !important;
+    }
+}
+
+*/
+
+
+/* Development tools are available only on desktop and stay collapsed by default. */
+.development-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.development-section-heading h2 {
+  margin: 0;
+}
+.development-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  border: 1px solid var(--border, #cbd5d1);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.development-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.development-content[hidden] {
+  display: none !important;
+}
+@media (max-width: 760px) {
+  .development-section {
+    display: none !important;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   Consistent typography for the sidebar, menus and application dialogs.
+   --------------------------------------------------------------------- */
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list, .destination-picker-option) {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+}
+
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list) :where(p, label, span, li, small, button,
+       input, select, textarea, option, legend, summary, .field-help,
+       .network-date, .journey-footnote) {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+  color: #5F6368;
+}
+
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list) :where(h1, h2, h3, h4, strong, legend,
+       .contractor-filter-heading) {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #202124 !important;
+}
+
+:where(body > aside, #journeyControls, [role="dialog"]) :where(input, select, textarea, button) {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+}
+
+:where(body > aside, #journeyControls, [role="dialog"]) :where(button.primary-button, .primary-button) {
+  color: #FFFFFF !important;
+}
+
+:where(body > aside, #journeyControls, [role="dialog"]) :where(button:disabled) {
+  color: #80868B !important;
+}
+
+/* Filter options: readable 14px text with slightly more breathing room. */
+.contractor-filter-options > .contractor-filter-option {
+  min-height: 19px !important;
+  height: auto !important;
+  padding: 2px 0 !important;
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+  line-height: 15px !important;
+  color: #5F6368 !important;
+}
+.contractor-filter-option span {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+  line-height: 15px !important;
+  color: #5F6368 !important;
+}
+.contractor-filter-options > .contractor-filter-option input {
+  flex-basis: 13px;
+  width: 13px;
+  height: 13px;
+}
+.contractor-filter-group legend,
+.contractor-filter-heading strong {
+  font-family: var(--font-main) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #202124 !important;
+}
+
+
+/* Final typography and spacing pass: 12px interface text, softer greys. */
+:root {
+  --text-primary: #50555B;
+  --text-secondary: #747A80;
+  --text-muted: #92979D;
+}
+body {
+  color: var(--text-primary);
+}
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list, .destination-picker-option) {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  color: #747A80 !important;
+}
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list) :where(p, label, span, li, small, button,
+       input, select, textarea, option, summary, .field-help,
+       .network-date, .journey-footnote) {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  color: #747A80;
+}
+:where(body > aside, #journeyControls, [role="dialog"], .map-loading-dialog,
+       .destination-picker-list) :where(h1, h2, h3, h4, strong, legend) {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #30343A !important;
+}
+
+/* Filter lists: compact, but not cramped; retain one column. */
+.destination-filter-groups { gap: 2px !important; }
+.destination-filter-group { padding: 2px 5px 3px !important; }
+.contractor-filter-options {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  row-gap: 0 !important;
+}
+.contractor-filter-options > .contractor-filter-option {
+  display: flex !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  padding: 1px 0 !important;
+  gap: 4px !important;
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  line-height: 14px !important;
+  color: #747A80 !important;
+}
+.contractor-filter-option span {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  line-height: 14px !important;
+  color: #747A80 !important;
+}
+.contractor-filter-options > .contractor-filter-option input {
+  flex: 0 0 12px !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin: 0 !important;
+}
+.contractor-filter-group legend,
+.contractor-filter-heading strong {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #30343A !important;
+}
+
+/* Map key and Leaflet map-layer menu use the same 12px interface typography. */
+.map-legend,
+.map-legend :where(*),
+.leaflet-control-layers,
+.leaflet-control-layers :where(*) {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+}
+.map-legend { color: #747A80 !important; }
+.map-legend__title {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #30343A !important;
+}
+.map-legend__row,
+.map-legend__row :where(span) {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  color: #747A80 !important;
+}
+.leaflet-control-layers label,
+.leaflet-control-layers label span {
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  color: #747A80 !important;
+}
+.leaflet-control-layers-expanded { padding: 8px 10px !important; }
+
+/* Vehicle names: readable grey text rather than black. */
+.vehicle-options .vehicle-label,
+.vehicle-options label .vehicle-label {
+  font-family: var(--font-main) !important;
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+  color: #747A80 !important;
+}
+
+
+/* Filter option hit areas: separate rows clearly and centre each checkbox. */
+.contractor-filter-options {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-rows: minmax(22px, auto) !important;
+  align-content: start !important;
+  gap: 1px !important;
+  row-gap: 1px !important;
+}
+.contractor-filter-options > label.contractor-filter-option {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 22px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 3px 1px !important;
+  gap: 6px !important;
+  line-height: 16px !important;
+  cursor: pointer !important;
+  overflow: visible !important;
+}
+.contractor-filter-options > label.contractor-filter-option > input[type="checkbox"] {
+  position: static !important;
+  display: block !important;
+  flex: 0 0 13px !important;
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  align-self: center !important;
+}
+.contractor-filter-options > label.contractor-filter-option > span {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 16px !important;
+}
+
+
+/* Unreachable destinations remain selectable but are clearly flagged. */
+.destination-picker-option.is-unreachable {
+  color: #c62828 !important;
+}
+.destination-picker-option.is-unreachable:hover,
+.destination-picker-option.is-unreachable:focus-visible {
+  color: #a51f1f !important;
+}
+
+
+/* Collapsed mobile summary: vehicle symbol and destination in a light-grey pill. */
+.mobile-header-summary {
+  display: none;
+}
+@media (max-width: 760px) {
+  body > #navigationPanel.mobile-panel-collapsed .site-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 56px;
+    margin: 0;
+    padding: 0;
+  }
+  body > #navigationPanel.mobile-panel-collapsed .site-header h1 {
+    display: none;
+  }
+  body > #navigationPanel.mobile-panel-collapsed .mobile-header-summary {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
+    gap: 8px;
+    overflow: hidden;
+    padding: 6px 10px;
+    border: 1px solid #e1e3e5;
+    border-radius: 999px;
+    background: #f1f2f3;
+    color: #747A80;
+    font-family: var(--font-main);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  .mobile-header-summary__vehicle-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 20px;
+    color: #747A80;
+  }
+  .mobile-header-summary__vehicle-icon svg {
+    display: block;
+    width: 22px;
+    height: 16px;
+  }
+  #mobileHeaderDestination {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body > #navigationPanel.mobile-panel-collapsed .header-actions {
+    flex: 0 0 auto;
+    gap: 5px;
+  }
+  body > #navigationPanel.mobile-panel-collapsed .header-actions .mobile-panel-toggle,
+  body > #navigationPanel.mobile-panel-collapsed .header-actions .live-route-toggle {
+    width: 92px;
+    min-width: 92px;
+  }
+}
+
+
+/* Destination type filters are presented as three fixed columns. */
+.destination-type-filter-group .contractor-filter-options {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  column-gap: 10px !important;
+  row-gap: 1px !important;
+}
+
+
+/* Show eight contractor choices before the contractor list itself scrolls. */
+.destination-filter-group:not(.destination-type-filter-group) .contractor-filter-options {
+  max-height: 184px !important;
+  overflow-y: auto !important;
+}
+
+
+/* Small developer credit at the bottom of the sidebar. */
+.sidebar-credit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 26px 0 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+.sidebar-credit img {
+  display: block;
+  width: auto;
+  max-width: 112px;
+  max-height: 24px;
+  object-fit: contain;
+}
+@media (max-width: 760px) {
+  .sidebar-credit {
+    margin-top: 20px;
+  }
+}
+
+
+/* Hide any Leaflet attribution badge in the map's bottom-right corner. */
+#map .leaflet-control-attribution {
+  display: none !important;
+}
