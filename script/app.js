@@ -1,0 +1,2566 @@
+"use strict";
+
+function themeColor(property) {
+  return getComputedStyle(document.documentElement).getPropertyValue(property).trim();
+}
+function themeNumber(property) {
+  return Number(themeColor(property));
+}
+
+/*
+ * LAAR NAVIGATION
+ *
+ * Required scripts:
+ *   Leaflet, Proj4, app.js, live-location.js, backgrounds.js
+ *
+ * Required GeoJSON:
+ *   roads, gates, destinations, destination_areas, routing-network.json
+ *
+ * Naming:
+ *   Reads Name first, then name.
+ *   Destination/polygon matching remains exact.
+ *
+ * Duplicate destinations:
+ *   First centroid retained.
+ *
+ * Metadata:
+ *   meta.json is optional.
+ *   network_reviewed_at is displayed without inventing a date.
+ */
+
+
+/* SETTINGS */
+
+const MAX_SNAP = 200;
+const MAX_GATE_CONNECTOR_DISTANCE = 10;
+
+const ROADS_FILE = "data/roads.geojson";
+const ENDPOINT_SNAP_DISTANCE = 10;
+const INITIAL_SCALE_BAR_METRES = 800;
+const SCALE_BAR_MAX_WIDTH = 100;
+let vehicleMode = "truck";
+let networkInputs = null;
+let prebuiltRoutingNetwork = null;
+let prebuiltRoutingLinks = null;
+let displayedRoadLayer = null;
+let displayedRoadLayerGroup = null;
+let vehicleChangeInProgress = false;
+
+function setVehicleUpdating(isUpdating) {
+  vehicleChangeInProgress = isUpdating;
+  const dialog = $("vehicleRoutingUpdateDialog");
+  if (dialog) dialog.hidden = !isUpdating;
+  document.querySelectorAll('input[name="vehicleTypeChoice"]').forEach(input => {
+    input.disabled = isUpdating;
+  });
+  if ($("vehicleType")) $("vehicleType").disabled = isUpdating;
+}
+
+function setMapClickHitAreaEnabled(enabled) {
+  if (!map) return;
+  map.getContainer().classList.toggle("map-click-selectable", Boolean(enabled));
+  setMapClickHoverCursor(null);
+}
+
+function setMapClickHoverCursor(_latlng) {
+  if (!map) return;
+  const container = map.getContainer();
+  // Map-click mode accepts clicks anywhere; snapping and route eligibility
+  // are resolved after the click rather than by the cursor hit-test.
+  const cursor = $("startMode")?.value === "map" ? "crosshair" : "";
+  container.style.cursor = cursor;
+  container.querySelectorAll(".leaflet-pane canvas, .leaflet-pane path.leaflet-interactive")
+    .forEach(element => { element.style.cursor = cursor; });
+}
+
+function roadField(properties, field) {
+  const key = Object.keys(properties || {}).find(k => k.toLowerCase() === field);
+  return key === undefined ? "" : String(properties[key] ?? "").trim().toLowerCase();
+}
+
+function isRoundaboutLink(properties) {
+  const name = roadField(properties, "name");
+  return /\broundabout\b/i.test(name) || /\br[\s_-]*\d+\b/i.test(name);
+}
+
+function roadAccess(properties, vehicle = vehicleMode) {
+  const type = roadField(properties, "type");
+  const supportedTypes = ["major", "minor", "local", "public", "haul", "main"];
+  const vehicleFields = ["car", "suv", "pickup", "minibus", "bus", "truck"];
+  if (!supportedTypes.includes(type) || !vehicleFields.includes(vehicle)) return false;
+  // Each vehicle is permitted only when its matching roads.geojson field is yes.
+  // Missing or blank fields do not grant access.
+  return roadField(properties, vehicle) === "yes";
+}
+
+function roadStyle(feature) {
+  const type = roadField(feature?.properties || {}, "type");
+  const palette = {
+    major: { color: "--map-major-road", outline: "--map-major-road-outline", width: "--map-road-width", casing: 6 },
+    main: { color: "--map-major-road", outline: "--map-major-road-outline", width: "--map-road-width", casing: 6 },
+    minor: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
+    local: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
+    public: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
+    haul: { color: "--map-haul-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 }
+  };
+  const style = palette[type];
+  return {
+    color: themeColor(style?.color || "--map-unknown-road"),
+    weight: themeNumber(style?.width || "--map-road-width") || 4,
+    opacity: 1,
+    dashArray: null,
+    lineCap: "round",
+    lineJoin: "round"
+  };
+}
+
+function roadCasingStyle(feature) {
+  const type = roadField(feature?.properties || {}, "type");
+  const palette = {
+    major: { color: "--map-major-road-outline", casing: 6 },
+    main: { color: "--map-major-road-outline", casing: 6 },
+    minor: { color: "--map-road-outline", casing: 5.5 },
+    local: { color: "--map-road-outline", casing: 5.5 },
+    public: { color: "--map-road-outline", casing: 5.5 },
+    haul: { color: "--map-road-outline", casing: 5.5 }
+  };
+  const style = palette[type];
+  return {
+    color: themeColor(style?.color || "--map-road-outline"),
+    weight: style?.casing || 5.5,
+    opacity: 1,
+    lineCap: "round",
+    lineJoin: "round"
+  };
+}
+
+function bindRoadPopup(feature, layer) {
+  layer.bindPopup(() => {
+    const p = feature.properties || {};
+    const box = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = p.Name || p.name || p.road_id || "Road";
+    const details = document.createElement("div");
+    details.style.whiteSpace = "pre-line";
+    details.textContent = "Type: " + (roadField(p, "type") || "missing") +
+      "\nTruck: " + (roadField(p, "truck") || "missing") +
+      "\nVehicle: " + vehicleMode +
+      "\nAccess: " + (roadAccess(p) ? "permitted by road attributes" : "not permitted") +
+      (isRoundaboutLink(p) ? "\nRoundabout: first-to-last coordinate direction" : "");
+    box.append(title, details);
+    return box;
+  });
+
+  // Replace Leaflet's automatic popup click handler so map-origin mode can
+  // consume road clicks without opening a popup. In other modes, retain it.
+  layer.off("click", layer._openPopup, layer);
+  layer.on("click", event => {
+    if ($("startMode")?.value === "map") {
+      // Let the map-level click handler process the click exactly once.
+      // Stopping propagation here can prevent origin selection on some renderers.
+      map.closePopup();
+      return;
+    }
+    layer.openPopup(event.latlng);
+  });
+}
+
+function reportAccessData(data) {
+  const roadFeatures = features(data, ROADS_FILE);
+  const invalid = roadFeatures.filter(feature => {
+    const p = feature.properties || {};
+    const type = roadField(p, "type");
+    const car = roadField(p, "car");
+    const truck = roadField(p, "truck");
+    return !["major", "minor", "local", "public", "haul", "main"].includes(type) ||
+      !["yes", "no"].includes(truck) ||
+      (car !== "" && !["yes", "no"].includes(car));
+  });
+  const invalidGeometry = roadFeatures.filter(feature => {
+    const geometry = feature.geometry;
+    const parts = geometry?.type === "LineString" ? [geometry.coordinates] :
+      geometry?.type === "MultiLineString" ? geometry.coordinates : [];
+    return !parts.some(part => Array.isArray(part) && part.length >= 2);
+  });
+  if (invalid.length) console.warn("Roads with unsupported type/access fields", invalid.map(f => f.properties));
+  if (invalidGeometry.length) console.warn("Roads skipped because they have no usable line geometry:", invalidGeometry.length);
+  return invalid.length + invalidGeometry.length;
+}
+
+function refreshVehicleRoads() {
+  if (!displayedRoadLayer) return;
+  displayedRoadLayer.setStyle(roadStyle);
+  displayedRoadLayer.eachLayer(layer => { if (layer.isPopupOpen()) layer.closePopup(); });
+}
+
+async function changeVehicle() {
+  if (vehicleChangeInProgress) return;
+  const switchStartedAt = performance.now();
+  const timing = {};
+  const mark = (name, startedAt) => {
+    const endedAt = performance.now();
+    timing[name] = Number(((endedAt - startedAt) / 1000).toFixed(3));
+    window.recordMapLoadTiming?.("Vehicle switch: " + name, startedAt, endedAt);
+  };
+  // Preserve the selected destination by its stable name, not its
+  // vehicle-specific location-array index. Keep the active start mode and
+  // map-click origin; prepareRoutingStart will reattach that origin to the
+  // newly selected vehicle's permitted network.
+  const selectedDestinationName = selectedDestination()?.name || null;
+  const selectedStartMode = $("startMode").value;
+
+  setVehicleUpdating(true);
+  const paintStartedAt = performance.now();
+  // Let the browser paint the progress indicator before graph construction starts.
+  await new Promise(resolve => requestAnimationFrame(() => resolve()));
+  mark("allow progress dialog to paint", paintStartedAt);
+  clearRoute();
+  vehicleMode = $("vehicleType").value;
+  let networkSource = "built on demand";
+  try {
+    const { r, g, d, metadata } = networkInputs;
+    const networkStartedAt = performance.now();
+    await build(null, r, g, d, metadata);
+    mark("build selected vehicle network", networkStartedAt);
+
+    const destinationsStartedAt = performance.now();
+    buildDestinationOptions();
+
+    // Restore the selected LAAR against the new vehicle-specific location
+    // array. Area-only destinations remain selectable as well.
+    const retainedDestination = selectedDestinationName
+      ? destinationOptions.find(option => option.name === selectedDestinationName)
+      : null;
+    $("end").value = retainedDestination
+      ? (retainedDestination.hasAccessPoint
+          ? String(retainedDestination.index)
+          : "missing:" + retainedDestination.name)
+      : "";
+    // Keep the user's search text and the chosen start mode unchanged.
+    $("startMode").value = selectedStartMode;
+    renderDestinationOptions();
+    mark("prepare and render destination options", destinationsStartedAt);
+
+    const mapRefreshStartedAt = performance.now();
+    updateGateHighlights();
+    $("start").selectedIndex = -1;
+    refreshVehicleRoads();
+    refreshShareControls();
+    mark("refresh map and controls", mapRefreshStartedAt);
+
+    if (retainedDestination) {
+      status(vehicleMode + ": updating route to " + retainedDestination.name + "…");
+      calculate();
+    } else {
+      status(vehicleMode + ": " + roads.length + " eligible roads. Select a destination to calculate a route.");
+    }
+  } catch (error) {
+    roads = [];
+    adjacency = new Map();
+    locations.forEach(location => { location.valid = false; });
+    refreshVehicleRoads();
+    status("Vehicle network error: " + error.message);
+    console.error(error);
+  } finally {
+    mark("TOTAL", switchStartedAt);
+    console.info("[Vehicle route diagnostics]", {
+      vehicle: vehicleMode,
+      networkSource,
+      timingsSeconds: timing,
+      eligibleRoads: roads.length,
+      graphNodes: nodes.size,
+      destinations: destinationOptions.length,
+      graphBuild: networkSource
+    });
+    setVehicleUpdating(false);
+  }
+}
+
+/* Endpoint-first origin/destination attachment; coordinates are projected metres. */
+function snapToNetwork(point, eligibleRoads = roads) {
+  let endpointMatch = null;
+  for (const road of eligibleRoads) {
+    const endpoints = [
+      { q: road.pts[0], m: 0, node: road.startNode },
+      { q: road.pts[road.pts.length - 1], m: road.ms[road.ms.length - 1], node: road.endNode }
+    ];
+    for (const endpoint of endpoints) {
+      const offset = dist(point, endpoint.q);
+      if (offset <= ENDPOINT_SNAP_DISTANCE && (!endpointMatch || offset < endpointMatch.offset)) {
+        endpointMatch = { road, ...endpoint, offset, snapType: "endpoint" };
+      }
+    }
+  }
+  if (endpointMatch) return endpointMatch;
+  let roadMatch = null;
+  for (const road of eligibleRoads) {
+    const candidate = nearest(point, road.pts);
+    if (!Number.isFinite(candidate.offset)) continue;
+    if (!roadMatch || candidate.offset < roadMatch.offset) {
+      roadMatch = { road, q: candidate.q, m: candidate.m, node: null,
+        offset: candidate.offset, snapType: "road" };
+    }
+  }
+  return roadMatch;
+}
+
+
+const ENDPOINT_TOLERANCE = 0.01;
+const AUTO_NODE_MERGE_TOLERANCE = 0.01;
+const JUNCTION_TO_LINK_TOLERANCE = 1.0;
+const GENERATED_NODE_TO_LINK_TOLERANCE = 0.05;
+const ROAD_CUT_TOLERANCE = 0.01;
+const JUNCTION_AMBIGUITY_TOLERANCE = 0.01;
+
+const UTM =
+  "+proj=utm +zone=38 +datum=WGS84 +units=m +no_defs";
+
+
+/* SHARED GLOBALS */
+
+const $ = id => document.getElementById(id);
+
+const status = text => {
+  if ($("status")) $("status").textContent = text;
+};
+
+let map;
+let siteBounds;
+
+let routeLayer = null;
+let routeOutlineLayer = null;
+let startConnectorLayer = null;
+let routeDebugLayer = null;
+let routeDebugRoadIds = new Set();
+
+function clearRouteDebugHighlight() {
+  if (routeDebugLayer && map) map.removeLayer(routeDebugLayer);
+  routeDebugLayer = null;
+  routeDebugRoadIds = new Set();
+}
+
+function highlightRouteSearchLinks() {
+  if (!map || !routeDebugRoadIds.size) return 0;
+  const layers = [];
+  for (const road of roads) {
+    if (!routeDebugRoadIds.has(road.id) ||
+        !Array.isArray(road.pts) || road.pts.length < 2) continue;
+    const line = L.polyline(road.pts.map(ll), {
+      color: "#ff2d55",
+      weight: 7,
+      opacity: 0.95,
+      lineCap: "round",
+      lineJoin: "round",
+      pane: "routePane",
+      interactive: true
+    });
+    line.bindTooltip("Route search examined: " + (road.name || road.id));
+    layers.push(line);
+  }
+  if (!layers.length) return 0;
+  routeDebugLayer = L.layerGroup(layers).addTo(map);
+  return layers.length;
+}
+
+function clearRouteFailureBanner() {
+  const existing = document.getElementById("routeFailureBanner");
+  if (existing) existing.remove();
+}
+
+function showRouteFailureBanner(message) {
+  clearRouteFailureBanner();
+  const container = document.getElementById("map");
+  if (!container) return;
+  if (getComputedStyle(container).position === "static") {
+    container.style.position = "relative";
+  }
+
+  const banner = document.createElement("div");
+  banner.id = "routeFailureBanner";
+  banner.setAttribute("role", "alert");
+  banner.style.cssText = [
+    "position:absolute",
+    "top:12px",
+    "left:50%",
+    "transform:translateX(-50%)",
+    "z-index:2000",
+    "display:flex",
+    "align-items:center",
+    "gap:8px",
+    "width:fit-content",
+    "max-width:calc(100% - 24px)",
+    "box-sizing:border-box",
+    "padding:12px 14px",
+    "border:1px solid #b3261e",
+    "border-radius:8px",
+    "background:#fce8e6",
+    "color:#7f1d1d",
+    "box-shadow:0 3px 12px rgba(0,0,0,.22)",
+    "font:600 13px/1.35 system-ui,sans-serif",
+    "pointer-events:auto"
+  ].join(";");
+
+  const text = document.createElement("span");
+  text.textContent = message;
+  text.style.cssText = "min-width:0;text-align:center;overflow-wrap:anywhere";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "×";
+  close.setAttribute("aria-label", "Dismiss route error");
+  close.title = "Dismiss";
+  close.style.cssText = [
+    "flex:0 0 auto",
+    "margin:-5px -5px 0 0",
+    "padding:0 3px",
+    "border:0",
+    "background:transparent",
+    "color:inherit",
+    "font:700 24px/1 system-ui,sans-serif",
+    "cursor:pointer"
+  ].join(";");
+  close.addEventListener("click", () => banner.remove());
+  banner.append(text, close);
+  container.appendChild(banner);
+}
+
+let selectedAreaLayer = null;
+
+let locations = [];
+let roads = [];
+let allRoadCandidates = [];
+
+let nodes = new Map();
+let junctionNodes = new Map();
+let adjacency = new Map();
+
+let generatedEndpointIds = new Set();
+
+let roadConnections = [];
+let interiorConnections = [];
+
+let destinationAreas = new Map();
+let ignoredDestinationNames = [];
+
+let destinationOptions = [];
+let selectedContractors = new Set();
+let selectedDestinationTypes = new Set();
+let gateMarkers = new Map();
+let gateMarkerLayer = null;
+
+let costMode = "distance";
+const routeEstimateSpeedKmh = 30;
+
+
+/* DATA LOADING */
+
+(function installMapLoadDiagnostics() {
+  const state = window.mapLoadTimingState = {
+    startedAt: performance.now(),
+    entries: []
+  };
+
+  window.recordMapLoadTiming = function (label, startedAt, endedAt = performance.now()) {
+    const duration = Math.max(0, endedAt - startedAt);
+    state.entries.push({ label, duration, elapsed: endedAt - state.startedAt });
+    const list = document.getElementById("mapLoadTimings");
+    const summary = document.getElementById("mapLoadTimingSummary");
+    if (list) {
+      list.replaceChildren();
+      state.entries.forEach(entry => {
+        const item = document.createElement("li");
+        item.textContent = entry.label + ": " + (entry.duration / 1000).toFixed(2) +
+          " s (+" + (entry.elapsed / 1000).toFixed(2) + " s after scripts start)";
+        list.appendChild(item);
+      });
+    }
+    if (summary) {
+      summary.textContent = "Elapsed since app scripts started: " +
+        ((performance.now() - state.startedAt) / 1000).toFixed(2) +
+        " s. Timings are measured in this browser session.";
+    }
+  };
+
+  window.updateMapLoadTimingSummary = function () {
+    const summary = document.getElementById("mapLoadTimingSummary");
+    if (summary) {
+      summary.textContent = "Elapsed since app scripts started: " +
+        ((performance.now() - state.startedAt) / 1000).toFixed(2) +
+        " s. Timings are measured in this browser session.";
+    }
+  };
+})();
+
+async function read(filename, optional = false) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+
+  try {
+    const response = await fetch(filename, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      if (optional && response.status === 404) {
+        return {};
+      }
+
+      throw new Error(
+        "Cannot load " + filename + ": HTTP " + response.status
+      );
+    }
+
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error(
+        filename + " is not valid JSON: " + error.message
+      );
+    }
+
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(
+        "Loading " + filename + " exceeded 60 seconds."
+      );
+    }
+
+    throw error;
+
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
+function features(data, filename) {
+  if (
+    !data ||
+    data.type !== "FeatureCollection" ||
+    !Array.isArray(data.features)
+  ) {
+    throw new Error(
+      filename + " must contain a GeoJSON FeatureCollection."
+    );
+  }
+
+  return data.features;
+}
+
+
+function nameOf(properties, label) {
+  const value = properties?.Name ?? properties?.name;
+
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ""
+  ) {
+    throw new Error(
+      label + " is missing Name/name. Available fields: " +
+      (Object.keys(properties || {}).join(", ") || "none")
+    );
+  }
+
+  return String(value);
+}
+
+
+/* COORDINATES */
+
+function validatePosition(coordinates, label) {
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 2 ||
+    !Number.isFinite(coordinates[0]) ||
+    !Number.isFinite(coordinates[1])
+  ) {
+    throw new Error(label + " has invalid coordinates.");
+  }
+
+  if (
+    Math.abs(coordinates[0]) > 180 ||
+    Math.abs(coordinates[1]) > 90
+  ) {
+    throw new Error(
+      label + " must use EPSG:4326 longitude/latitude."
+    );
+  }
+
+  return [coordinates[0], coordinates[1]];
+}
+
+
+function pointOf(feature, label) {
+  const geometry = feature.geometry;
+
+  if (geometry?.type === "Point") {
+    return validatePosition(geometry.coordinates, label);
+  }
+
+  if (
+    geometry?.type === "MultiPoint" &&
+    geometry.coordinates?.length === 1
+  ) {
+    return validatePosition(geometry.coordinates[0], label);
+  }
+
+  throw new Error(
+    label + " must be a Point or single-point MultiPoint."
+  );
+}
+
+
+function xy(coordinates) {
+  const point = proj4("EPSG:4326", UTM, coordinates);
+
+  if (!point.every(Number.isFinite)) {
+    throw new Error("Unable to transform coordinates.");
+  }
+
+  return point;
+}
+
+
+function ll(point) {
+  const coordinates = proj4(UTM, "EPSG:4326", point);
+  return [coordinates[1], coordinates[0]];
+}
+
+/* Length-weighted centre of the haul-road network only. */
+function roadNetworkCenter() {
+  let weightedX = 0;
+  let weightedY = 0;
+  let totalLength = 0;
+
+  for (const road of allRoadCandidates) {
+    if (roadField(road.properties || {}, "type") !== "haul") continue;
+
+    for (let i = 0; i < road.pts.length - 1; i++) {
+      const a = road.pts[i];
+      const b = road.pts[i + 1];
+      const length = dist(a, b);
+      if (!Number.isFinite(length) || length <= 0) continue;
+
+      weightedX += ((a[0] + b[0]) / 2) * length;
+      weightedY += ((a[1] + b[1]) / 2) * length;
+      totalLength += length;
+    }
+  }
+
+  if (!totalLength) return siteBounds.getCenter();
+  return L.latLng(ll([weightedX / totalLength, weightedY / totalLength]));
+}
+
+
+function dist(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+
+/* POLYGON LOOKUP */
+
+function loadDestinationAreas(data) {
+  destinationAreas = new Map();
+
+  for (
+    const feature of features(data, "data/destination_areas.geojson")
+  ) {
+    const name = nameOf(feature.properties, "LAAR polygon");
+    const geometry = feature.geometry;
+
+    if (
+      !geometry ||
+      !["Polygon", "MultiPolygon"].includes(geometry.type)
+    ) {
+      throw new Error(
+        "LAAR " + name + " must be Polygon or MultiPolygon."
+      );
+    }
+
+    const polygons = geometry.type === "Polygon"
+      ? [geometry.coordinates]
+      : geometry.coordinates;
+
+    if (!Array.isArray(polygons) || !polygons.length) {
+      throw new Error("LAAR " + name + " has empty geometry.");
+    }
+
+    for (const polygon of polygons) {
+      if (!Array.isArray(polygon) || !polygon.length) {
+        throw new Error("LAAR " + name + " has no rings.");
+      }
+
+      for (const ring of polygon) {
+        if (!Array.isArray(ring) || ring.length < 4) {
+          throw new Error("Invalid polygon ring: " + name);
+        }
+
+        ring.forEach(coordinate => {
+          validatePosition(coordinate, "LAAR " + name);
+        });
+
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+          throw new Error("Unclosed polygon ring: " + name);
+        }
+      }
+    }
+
+    if (!destinationAreas.has(name)) {
+      destinationAreas.set(name, []);
+    }
+
+    destinationAreas.get(name).push(feature);
+  }
+}
+
+
+function nearest(point, points) {
+  let best = { offset: Infinity };
+  let walked = 0;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const length = dist(a, b);
+
+    if (!length) continue;
+
+    const fraction = Math.max(
+      0,
+      Math.min(
+        1,
+        (
+          (point[0] - a[0]) * (b[0] - a[0]) +
+          (point[1] - a[1]) * (b[1] - a[1])
+        ) / (length * length)
+      )
+    );
+
+    const q = [
+      a[0] + fraction * (b[0] - a[0]),
+      a[1] + fraction * (b[1] - a[1])
+    ];
+
+    const offset = dist(point, q);
+
+    if (offset < best.offset) {
+      best = {
+        offset,
+        m: walked + fraction * length,
+        q
+      };
+    }
+
+    walked += length;
+  }
+
+  return best;
+}
+
+
+function at(road, position) {
+  for (let i = 0; i < road.pts.length - 1; i++) {
+    if (position <= road.ms[i + 1]) {
+      const span = road.ms[i + 1] - road.ms[i];
+      const fraction = span
+        ? (position - road.ms[i]) / span
+        : 0;
+
+      const a = road.pts[i];
+      const b = road.pts[i + 1];
+
+      return [
+        a[0] + fraction * (b[0] - a[0]),
+        a[1] + fraction * (b[1] - a[1])
+      ];
+    }
+  }
+
+  return road.pts[road.pts.length - 1];
+}
+
+
+function section(road, startPosition, endPosition) {
+  return [
+    at(road, startPosition),
+
+    ...road.pts.filter((point, i) => {
+      return (
+        road.ms[i] > startPosition &&
+        road.ms[i] < endPosition
+      );
+    }),
+
+    at(road, endPosition)
+  ];
+}
+
+
+/* ROAD ENDPOINTS */
+
+function nearestJunction(point) {
+  let first = null;
+  let second = null;
+
+  for (const [id, junctionPoint] of junctionNodes) {
+    if (generatedEndpointIds.has(id)) continue;
+
+    const candidate = {
+      id,
+      distance: dist(point, junctionPoint)
+    };
+
+    if (!first || candidate.distance < first.distance) {
+      second = first;
+      first = candidate;
+    } else if (!second || candidate.distance < second.distance) {
+      second = candidate;
+    }
+  }
+
+  if (first && first.distance <= ENDPOINT_TOLERANCE) {
+    return {
+      ...first,
+
+      ambiguous:
+        second !== null &&
+        second.distance <= ENDPOINT_TOLERANCE &&
+        Math.abs(second.distance - first.distance) <=
+          JUNCTION_AMBIGUITY_TOLERANCE,
+
+      generated: false
+    };
+  }
+
+  let shared = null;
+
+  for (const id of generatedEndpointIds) {
+    const offset = dist(point, junctionNodes.get(id));
+
+    if (
+      offset <= AUTO_NODE_MERGE_TOLERANCE &&
+      (!shared || offset < shared.distance)
+    ) {
+      shared = { id, distance: offset };
+    }
+  }
+
+  if (shared) {
+    return {
+      ...shared,
+      ambiguous: false,
+      generated: true
+    };
+  }
+
+  let number = generatedEndpointIds.size;
+  let id = "__auto_endpoint_" + number;
+
+  while (nodes.has(id) || junctionNodes.has(id)) {
+    number += 1;
+    id = "__auto_endpoint_" + number;
+  }
+
+  const endpoint = [...point];
+
+  nodes.set(id, endpoint);
+  junctionNodes.set(id, endpoint);
+  generatedEndpointIds.add(id);
+
+  return {
+    id,
+    distance: 0,
+    ambiguous: false,
+    generated: true
+  };
+}
+
+
+async function connectJunctionsToRoadLinks() {
+  const connections = [];
+  // Index road segments into a 10 m spatial grid. Junctions only need to
+  // inspect segments whose bounding boxes are within the maximum 1 m snap
+  // tolerance, rather than scanning every vertex of every road.
+  const cellSize = 10;
+  const cellKey = (x, y) =>
+    Math.floor(x / cellSize) + ":" + Math.floor(y / cellSize);
+  const segmentGrid = new Map();
+  const addSegmentToCell = (x, y, segment) => {
+    const key = cellKey(x, y);
+    let bucket = segmentGrid.get(key);
+    if (!bucket) segmentGrid.set(key, bucket = []);
+    bucket.push(segment);
+  };
+
+  for (const road of roads) {
+    for (let i = 0; i < road.pts.length - 1; i++) {
+      const a = road.pts[i];
+      const b = road.pts[i + 1];
+      const length = road.ms[i + 1] - road.ms[i];
+      if (!length) continue;
+      const segment = { road, a, b, startM: road.ms[i], length };
+      const minX = Math.floor((Math.min(a[0], b[0]) - JUNCTION_TO_LINK_TOLERANCE) / cellSize);
+      const maxX = Math.floor((Math.max(a[0], b[0]) + JUNCTION_TO_LINK_TOLERANCE) / cellSize);
+      const minY = Math.floor((Math.min(a[1], b[1]) - JUNCTION_TO_LINK_TOLERANCE) / cellSize);
+      const maxY = Math.floor((Math.max(a[1], b[1]) + JUNCTION_TO_LINK_TOLERANCE) / cellSize);
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) addSegmentToCell(x, y, segment);
+      }
+    }
+  }
+
+  // Find the closest segment on each road for each junction using the index.
+  const matchesByRoad = new Map();
+  for (const [nodeId, point] of junctionNodes) {
+    const bucket = segmentGrid.get(cellKey(point[0], point[1])) || [];
+    const bestByRoad = new Map();
+    for (const segment of bucket) {
+      const road = segment.road;
+      if (nodeId === road.startNode || nodeId === road.endNode) continue;
+      const dx = segment.b[0] - segment.a[0];
+      const dy = segment.b[1] - segment.a[1];
+      const fraction = Math.max(0, Math.min(1,
+        ((point[0] - segment.a[0]) * dx + (point[1] - segment.a[1]) * dy) /
+        (segment.length * segment.length)
+      ));
+      const q = [segment.a[0] + fraction * dx, segment.a[1] + fraction * dy];
+      const offset = dist(point, q);
+      const match = { offset, m: segment.startM + fraction * segment.length, q };
+      const previous = bestByRoad.get(road.id);
+      if (!previous || match.offset < previous.offset) bestByRoad.set(road.id, match);
+    }
+    for (const [roadId, match] of bestByRoad) {
+      const roadMatches = matchesByRoad.get(roadId) || new Map();
+      roadMatches.set(nodeId, match);
+      matchesByRoad.set(roadId, roadMatches);
+    }
+  }
+
+  for (let roadIndex = 0; roadIndex < roads.length; roadIndex++) {
+    const road = roads[roadIndex];
+    const roadLength = road.ms[road.ms.length - 1];
+    const roadMatches = matchesByRoad.get(road.id) || new Map();
+
+    for (const [nodeId, match] of roadMatches) {
+      const generated = generatedEndpointIds.has(nodeId);
+      const tolerance = generated
+        ? GENERATED_NODE_TO_LINK_TOLERANCE
+        : JUNCTION_TO_LINK_TOLERANCE;
+      if (!Number.isFinite(match.offset) || match.offset > tolerance) continue;
+
+      const existing = road.cuts.find(cut =>
+        Math.abs(cut.m - match.m) <= ROAD_CUT_TOLERANCE
+      );
+      if (existing) {
+        if (existing.node !== nodeId) {
+          connections.push({
+            road_id: road.id, node: nodeId, connected_node: existing.node,
+            offset_m: Number(match.offset.toFixed(3)), shared_position: true
+          });
+        }
+        continue;
+      }
+
+      if (match.m <= ROAD_CUT_TOLERANCE ||
+          roadLength - match.m <= ROAD_CUT_TOLERANCE) continue;
+
+      road.cuts.push({ m: match.m, node: nodeId });
+      connections.push({
+        road_id: road.id,
+        node: nodeId,
+        offset_m: Number(match.offset.toFixed(3))
+      });
+    }
+
+    road.cuts.sort((a, b) => a.m - b.m);
+    if ((roadIndex + 1) % 25 === 0) {
+      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    }
+  }
+
+  console.info("Road-link junction connections:", connections.length);
+  return connections;
+}
+
+
+/* BUILD BASE GRAPH */
+
+async function build(
+  junctionData,
+  roadData,
+  gateData,
+  destinationData,
+  metadata
+) {
+  nodes = new Map();
+  junctionNodes = new Map();
+  adjacency = new Map();
+  generatedEndpointIds = new Set();
+  const topology = prebuiltRoutingNetwork?.schemaVersion === 1 ? prebuiltRoutingNetwork : null;
+  if (!topology) throw new Error("Backend road-shape routing network is unavailable. Run the Build routing network workflow.");
+  prebuiltRoutingLinks = topology
+    ? new Map(topology.links.map(link => [link.sourceFeatureIndex + ":" + link.sourcePartIndex, link]))
+    : null;
+
+  roads = [];
+  allRoadCandidates = [];
+  locations = [];
+  roadConnections = [];
+  interiorConnections = [];
+  ignoredDestinationNames = [];
+
+  // Use each road's GeoJSON speed (km/h). The fallback is only for older
+  // road features that do not provide a valid positive speed.
+
+  status("Building network: junctions and roads…");
+
+  const junctionLoadStartedAt = performance.now();
+  if (topology) {
+    for (const node of topology.nodes) {
+      const point = node.xy;
+      nodes.set(node.id, point);
+      junctionNodes.set(node.id, point);
+      if (node.generated) generatedEndpointIds.add(node.id);
+    }
+  }
+  window.recordMapLoadTiming?.("Build: load backend road-shape topology", junctionLoadStartedAt);
+  const roadProcessingStartedAt = performance.now();
+  const roadIds = new Set();
+  const endpointErrors = [];
+  let skippedRoadParts = 0;
+  const roadFeatures = features(roadData, "data/roads.geojson");
+
+  for (let featureIndex = 0; featureIndex < roadFeatures.length; featureIndex++) {
+    const feature = roadFeatures[featureIndex];
+    const p = feature.properties || {};
+    const geometry = feature.geometry;
+    const rawId = p.road_id ?? p.id;
+    const baseId = rawId !== undefined && rawId !== null && String(rawId).trim() !== ""
+      ? String(rawId).trim()
+      : "R_" + String(featureIndex + 1).padStart(4, "0");
+
+    let coordinateParts;
+    if (geometry?.type === "LineString") coordinateParts = [geometry.coordinates];
+    else if (geometry?.type === "MultiLineString") {
+      coordinateParts = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
+    } else {
+      skippedRoadParts++;
+      continue;
+    }
+
+    const usableParts = coordinateParts
+      .map((part, sourcePartIndex) => ({ part, sourcePartIndex }))
+      .filter(item => Array.isArray(item.part) && item.part.length >= 2)
+      .map(({ part, sourcePartIndex }) => ({
+        sourcePartIndex,
+        points: part.map(coordinate => xy(validatePosition(coordinate, "Road " + baseId)))
+      }))
+      .map(part => {
+        let geometryLength = 0;
+        for (let i = 1; i < part.points.length; i++) {
+          geometryLength += dist(part.points[i - 1], part.points[i]);
+        }
+        return { ...part, geometryLength };
+      })
+      .filter(part => Number.isFinite(part.geometryLength) && part.geometryLength > 0);
+
+    if (!usableParts.length) {
+      skippedRoadParts++;
+      continue;
+    }
+    const totalGeometryLength = usableParts.reduce((sum, part) => sum + part.geometryLength, 0);
+
+    for (let partIndex = 0; partIndex < usableParts.length; partIndex++) {
+      const part = usableParts[partIndex];
+      const id = usableParts.length > 1 ? baseId + "_P" + (partIndex + 1) : baseId;
+      if (roadIds.has(id)) throw new Error("Duplicate road: " + id);
+      roadIds.add(id);
+
+      const points = part.points;
+      allRoadCandidates.push({
+        id, sourceFeatureIndex: featureIndex, sourcePartIndex: part.sourcePartIndex,
+        properties: p, pts: points
+      });
+
+      const topologyLink = prebuiltRoutingLinks?.get(featureIndex + ":" + part.sourcePartIndex);
+      if (topologyLink ? topologyLink.access?.[vehicleMode] !== "yes" : !roadAccess(p)) continue;
+      if (topology && !topologyLink) {
+        throw new Error("Backend routing topology is missing road part " + featureIndex + ":" + part.sourcePartIndex + ".");
+      }
+      const separation = dist(points[0], points[points.length - 1]);
+      const start = topologyLink
+        ? { id: topologyLink.startNode, ambiguous: false }
+        : nearestJunction(points[0]);
+      const end = topologyLink
+        ? { id: topologyLink.endNode, ambiguous: false }
+        : nearestJunction(points[points.length - 1]);
+      if (start.ambiguous || end.ambiguous) {
+        endpointErrors.push(id + ": ambiguous endpoint.");
+        continue;
+      }
+      if (start.id === end.id && separation > 0.01) {
+        endpointErrors.push(id + ": distinct endpoints collapse.");
+        continue;
+      }
+
+      points[0] = junctionNodes.get(start.id);
+      points[points.length - 1] = junctionNodes.get(end.id);
+      const measures = [0];
+      for (let i = 1; i < points.length; i++) {
+        measures.push(measures[i - 1] + dist(points[i - 1], points[i]));
+      }
+
+      const geometryLength = measures[measures.length - 1];
+      const sourceLength = Number(p.length);
+      const length = Number.isFinite(sourceLength) && sourceLength > 0
+        ? sourceLength * (part.geometryLength / totalGeometryLength)
+        : geometryLength;
+      const rawSpeed = Number(p.speed);
+      const speedKmh = p.speed !== undefined && p.speed !== null &&
+        String(p.speed).trim() !== "" && Number.isFinite(rawSpeed) && rawSpeed > 0
+        ? rawSpeed
+        : routeEstimateSpeedKmh;
+      let direction = String(p.direction || "both").trim().toLowerCase();
+      const roundabout = isRoundaboutLink(p);
+      if (direction === "one") direction = "forward";
+      if (["two-way", "twoway", "bidirectional"].includes(direction)) direction = "both";
+      if (roundabout) direction = "forward";
+
+      if (!Number.isFinite(length) || length <= 0 || geometryLength <= 0) {
+        throw new Error("Invalid road length: " + id);
+      }
+      if (!["both", "forward", "reverse"].includes(direction)) {
+        throw new Error("Invalid road direction: " + id + " (" + direction + ")");
+      }
+
+      roads.push({
+        id, sourceFeatureIndex: featureIndex, sourcePartIndex: part.sourcePartIndex,
+        name: p.Name || p.name || id,
+        startNode: start.id, endNode: end.id,
+        pts: points, ms: measures, length, direction, roundabout,
+        speedKmh, properties: p,
+        type: roadField(p, "type"), truck: roadField(p, "truck"),
+        cuts: topologyLink
+          ? topologyLink.cuts.map(cut => ({ m: cut.m, node: cut.node }))
+          : [
+              { m: 0, node: start.id },
+              { m: geometryLength, node: end.id }
+            ]
+      });
+      roadConnections.push({ road_id: id, start_node: start.id, end_node: end.id });
+    }
+  }
+
+  if (skippedRoadParts) {
+    console.warn("Skipped road features/parts with unsupported or empty geometry:", skippedRoadParts);
+  }
+
+  if (endpointErrors.length) {
+    throw new Error(endpointErrors.slice(0, 5).join("\n"));
+  }
+
+  // Empty vehicle networks remain switchable but cannot produce routes.
+
+  window.recordMapLoadTiming?.("Build: process road features and match endpoints", roadProcessingStartedAt);
+  const interiorConnectionStartedAt = performance.now();
+  interiorConnections = Array.isArray(topology.connections) ? topology.connections : [];
+  window.recordMapLoadTiming?.("Build: use backend road-shape connections", interiorConnectionStartedAt);
+
+  status("Building network: attaching destinations and gates…");
+
+  const locationAttachmentStartedAt = performance.now();
+  const datasets = [
+    ["gate", gateData, "data/gates.geojson"],
+    ["destination", destinationData, "data/destinations.geojson"]
+  ];
+
+  for (const [kind, data, filename] of datasets) {
+    const usedNames = new Set();
+
+    const sourceFeatures = features(data, filename);
+    for (let sourceFeatureIndex = 0; sourceFeatureIndex < sourceFeatures.length; sourceFeatureIndex++) {
+      const feature = sourceFeatures[sourceFeatureIndex];
+      // Destination labels and lookup keys must come from the GeoJSON
+      // properties.name field, not longname or the gate Name/name fallback.
+      const name = kind === "destination"
+        ? String(feature.properties?.name ?? "").trim()
+        : nameOf(feature.properties, filename);
+      if (!name) {
+        throw new Error(
+          filename + " feature " + sourceFeatureIndex +
+          " is missing the required name property."
+        );
+      }
+      const destinationType = kind === "destination"
+        ? String(feature.properties?.type ?? "").trim()
+        : "";
+
+      if (kind === "destination" && !["WAN", "LAAR", "Office"].includes(destinationType)) {
+        throw new Error(
+          "Destination " + name + " has invalid type '" + destinationType +
+          "'. Expected WAN, LAAR, or Office."
+        );
+      }
+
+      if (usedNames.has(name)) {
+        if (kind === "destination") {
+          ignoredDestinationNames.push(name);
+          console.warn("Ignoring duplicate destination:", name);
+          continue;
+        }
+
+        throw new Error("Duplicate gate name: " + name);
+      }
+
+      usedNames.add(name);
+
+      const point = xy(pointOf(feature, kind + " " + name));
+      let match;
+      // Identify the nearest mapped road across all road classes first.
+      // Never bypass a closer haul/public road that this vehicle cannot use.
+      let nearestMappedRoad = null;
+      for (const candidate of allRoadCandidates) {
+        const projection = nearest(point, candidate.pts);
+        if (Number.isFinite(projection.offset) &&
+            (!nearestMappedRoad || projection.offset < nearestMappedRoad.offset)) {
+          nearestMappedRoad = { candidate, ...projection };
+        }
+      }
+      const permittedRoad = nearestMappedRoad
+        ? roads.find(candidate => candidate.id === nearestMappedRoad.candidate.id)
+        : null;
+
+      if (kind === "destination") {
+        // Keep endpoint-first snapping, but only on the nearest mapped road
+        // when that road belongs to this vehicle's permitted network.
+        match = permittedRoad
+          ? snapToNetwork(point, [permittedRoad])
+          : null;
+      } else {
+        // Origins retain their coordinates and need a close, permitted
+        // connection to the nearest mapped road.
+        if (permittedRoad && nearestMappedRoad.offset <= MAX_GATE_CONNECTOR_DISTANCE) {
+          const projection = nearest(point, permittedRoad.pts);
+          match = { road: permittedRoad, ...projection, snapType: "origin-connector" };
+        } else {
+          match = null;
+        }
+      }
+      const best = match || { offset: Infinity };
+      const road = match?.road || null;
+
+      if (!road || !Number.isFinite(best.offset)) {
+        locations.push({
+          name, kind, type: destinationType, sourceFeatureIndex, point, node: null, offset: Infinity, valid: false,
+          snapType: "unavailable",
+          nearestRoadType: nearestMappedRoad
+            ? roadField(nearestMappedRoad.candidate.properties, "type")
+            : "",
+          nearestRoadTruck: nearestMappedRoad
+            ? roadField(nearestMappedRoad.candidate.properties, "truck")
+            : "",
+          nearestRoadOffset: nearestMappedRoad?.offset ?? Infinity,
+          contractor: kind === "destination" ? String(feature.properties?.contractor ?? "").trim() : "",
+          operatingHours: feature.properties?.operating_hours,
+          permittedVehicleTypes: feature.properties?.permitted_vehicle_types
+        });
+        continue;
+      }
+
+      let cut = best.snapType === "endpoint"
+        ? { m: best.m, node: best.node }
+        : road.cuts.find(item => Math.abs(item.m - best.m) <= ROAD_CUT_TOLERANCE);
+
+      if (!cut) {
+        let id = "__location_" + locations.length;
+        while (nodes.has(id)) id += "_";
+
+        cut = { m: best.m, node: id };
+        road.cuts.push(cut);
+        nodes.set(id, best.q);
+      }
+
+      locations.push({
+        name,
+        kind,
+        type: destinationType,
+        sourceFeatureIndex,
+        point,
+        node: cut.node,
+        offset: best.offset,
+        valid: kind === "gate"
+          ? best.offset <= MAX_GATE_CONNECTOR_DISTANCE
+          : best.offset <= MAX_SNAP,
+        snapType: best.snapType,
+        attachedRoadId: road.id,
+        nearestRoadType: nearestMappedRoad
+          ? roadField(nearestMappedRoad.candidate.properties, "type")
+          : "",
+        nearestRoadTruck: nearestMappedRoad
+          ? roadField(nearestMappedRoad.candidate.properties, "truck")
+          : "",
+        nearestRoadOffset: nearestMappedRoad?.offset ?? Infinity,
+        contractor: kind === "destination" ? String(feature.properties?.contractor ?? "").trim() : "",
+        package: kind === "destination" ? String(feature.properties?.package ?? "").trim() : "",
+        operatingHours: feature.properties?.operating_hours,
+        permittedVehicleTypes: feature.properties?.permitted_vehicle_types
+      });
+    }
+  }
+
+  window.recordMapLoadTiming?.("Build: attach gates and destinations to roads", locationAttachmentStartedAt);
+  const adjacencyStartedAt = performance.now();
+  for (const id of nodes.keys()) adjacency.set(id, []);
+
+  // Intentional shared-position IDs join without duplicating road distance.
+  const roadLookup = new Map(roads.map(road => [road.id, road]));
+  for (const connection of interiorConnections) {
+    if (!connection.shared_position) continue;
+    const a = connection.node;
+    const b = connection.connected_node;
+    const road = roadLookup.get(connection.road_id);
+    if (!road || !adjacency.has(a) || !adjacency.has(b) || a === b) continue;
+    for (const [from, to] of [[a, b], [b, a]]) {
+      const edges = adjacency.get(from);
+      if (edges.some(edge => edge.to === to && edge.topologyConnection)) continue;
+      edges.push({ to, length: 0, seconds: 0, weight: 0, pts: [],
+        name: road.name, roadId: road.id, topologyConnection: true });
+    }
+  }
+
+
+  for (const road of roads) {
+    road.cuts.sort((a, b) => a.m - b.m);
+
+    for (let i = 0; i < road.cuts.length - 1; i++) {
+      const a = road.cuts[i];
+      const b = road.cuts[i + 1];
+
+      if (b.m <= a.m) continue;
+
+      const length =
+        road.length * (b.m - a.m) /
+        road.ms[road.ms.length - 1];
+
+      const seconds = length / (road.speedKmh / 3.6);
+      const points = section(road, a.m, b.m);
+
+      if (road.direction !== "reverse") {
+        adjacency.get(a.node).push({
+          to: b.node,
+          length,
+          seconds,
+          weight: length,
+          pts: points,
+          name: road.name,
+          roadId: road.id
+        });
+      }
+
+      if (road.direction !== "forward") {
+        adjacency.get(b.node).push({
+          to: a.node,
+          length,
+          seconds,
+          weight: length,
+          pts: [...points].reverse(),
+          name: road.name,
+          roadId: road.id
+        });
+      }
+    }
+  }
+  window.recordMapLoadTiming?.("Build: create directed road edges", adjacencyStartedAt);
+}
+
+
+/* SECURITY GUARD GATE ICON */
+
+/* Shared by map markers and the map legend. */
+function gateSvg() {
+  return `
+    <svg class="security-guard-symbol" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
+      <path class="security-guard-symbol__body" d="M3.5 41c.6-12.8 6.8-20 18.5-20s17.9 7.2 18.5 20z"/>
+      <circle class="security-guard-symbol__head" cx="22" cy="14.5" r="6"/>
+      <path class="security-guard-symbol__cap" d="M13.5 13a8.5 8.5 0 0 1 17 0v1.5h-17z"/>
+      <path class="security-guard-symbol__badge" d="M22 25l3 3-3 3-3-3z"/>
+    </svg>
+  `;
+}
+
+function createGateIcon(selected = false) {
+  return L.divIcon({
+    className: "laar-gate-icon",
+
+    html: `
+      <div class="laar-gate-marker${selected ? " is-selected" : ""}">
+        ${gateSvg()}
+      </div>
+    `,
+
+    iconSize: [33, 33],
+    iconAnchor: [16.5, 16.5],
+    popupAnchor: [0, -16.5],
+    tooltipAnchor: [0, -16.5]
+  });
+}
+
+function createGatePopup(location, selected = false) {
+  function el(tag, cls, text) {
+    const e = document.createElement(tag); e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function row(label, value) {
+    const r = el("div", "laar-gate-card__metric");
+    const text = Array.isArray(value) ? value.join(", ") : String(value ?? "").trim();
+    const v = el("span", "laar-gate-card__metric-value", text || "Not provided");
+    Object.assign(v.style, {whiteSpace:"normal", overflowWrap:"anywhere", fontSize:"12px", textAlign:"right", maxWidth:"60%"});
+    r.append(el("span", "laar-gate-card__metric-label", label), v);
+    return r;
+  }
+  const card = el("div", "laar-gate-card");
+  const header = el("div", "laar-gate-card__header");
+  header.append(el("div", "laar-gate-card__eyebrow", selected ? "SELECTED STARTING GATE" : "SITE ACCESS"), el("h2", "laar-gate-card__title", location.name));
+  const body = el("div", "laar-gate-card__body");
+  body.append(row("Operating hours", location.operatingHours), row("Permitted vehicles", location.permittedVehicleTypes),
+    el("p", "laar-gate-card__note", "Confirm current gate arrangements and access permission before travelling."));
+  card.append(header, body);
+  return card;
+}
+
+
+function updateGateHighlights(selectedIndex = null) {
+  for (const [index, marker] of gateMarkers) {
+    const selected = index === selectedIndex;
+
+    marker.setIcon(createGateIcon(selected));
+    marker.setZIndexOffset(selected ? 1000 : 0);
+    marker.setPopupContent(
+      createGatePopup(locations[index], selected)
+    );
+  }
+}
+
+
+/* MAP LEGEND */
+
+function addMapLegend() {
+  const legend = L.control({ position: "bottomright" });
+
+  legend.onAdd = () => {
+    const container = L.DomUtil.create("div", "map-legend");
+
+    container.innerHTML = `
+      <div class="map-legend__title">Map key</div>
+      <div class="map-legend__row"><svg class="map-key-svg" width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M3 4 H27" stroke="#7189A8" stroke-width="6" stroke-linecap="round"/><path d="M3 4 H27" stroke="#92A9C6" stroke-width="4" stroke-linecap="round"/></svg><span>Main Road</span></div>
+      <div class="map-legend__row"><svg class="map-key-svg" width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M3 4 H27" stroke="#B0C2D4" stroke-width="5" stroke-linecap="round"/><path d="M3 4 H27" stroke="#D9E1E8" stroke-width="3.5" stroke-linecap="round"/></svg><span>Minor Roads</span></div>
+      <div class="map-legend__row"><svg class="map-key-svg" width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M3 4 H27" stroke="#7189A8" stroke-width="6" stroke-linecap="round"/><path d="M3 4 H27" stroke="#92A9C6" stroke-width="4" stroke-linecap="round"/></svg><span>Haul road</span></div>
+      <div class="map-legend__row">
+        <span class="legend-gate">${gateSvg()}</span>
+        <span>Site gate</span>
+      </div>
+      <div class="map-legend__row">
+        <span class="legend-gate legend-gate--selected">${gateSvg()}</span>
+        <span>Selected starting gate</span>
+      </div>
+      <div class="map-legend__row">
+        <span class="legend-location"></span>
+        <span>Live location</span>
+      </div>
+      <div class="map-legend__row">
+        <svg class="map-key-svg map-key-destination" width="30" height="20" viewBox="0 0 30 20" aria-hidden="true"><rect x="2" y="2" width="26" height="16" rx="1" fill="#3388ff" fill-opacity="0.25" stroke="#3388ff" stroke-width="2"/></svg>
+        <span>Destination</span>
+      </div>
+      <div class="map-legend__row">
+        <svg class="map-key-svg map-key-route" width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M3 4 H27" stroke="#175cd3" stroke-width="6" stroke-linecap="round"/></svg>
+        <span>Road-network route</span>
+      </div>
+    `;
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    return container;
+  };
+
+  legend.addTo(map);
+}
+
+
+/* SEARCHABLE DESTINATION SELECTOR */
+
+function searchKey(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+
+function destinationCategory(item) {
+  const type = String(item?.type || "").trim().toUpperCase();
+  if (type === "WAN") return "WAN";
+  if (type === "LAAR") return "LAAR";
+  if (type === "OFFICE") return "Office";
+  return "Other";
+}
+
+function buildDestinationOptions() {
+  const pointIndexes = new Map();
+  locations.forEach((location, index) => {
+    if (location.kind === "destination" && !pointIndexes.has(location.name)) {
+      pointIndexes.set(location.name, {location, index});
+    }
+  });
+
+  // Include every named destination from either source. A polygon without a
+  // matching access point remains selectable so its area can still be shown.
+  const names = new Set([...destinationAreas.keys(), ...pointIndexes.keys()]);
+  destinationOptions = [...names].map(name => {
+    const match = pointIndexes.get(name);
+    const typeFromName = name.match(/^DGII-([^-]+)-/i)?.[1] || "";
+    return {
+      index: match?.index ?? null,
+      name,
+      type: match?.location.type || typeFromName,
+      valid: match?.location.valid ?? false,
+      contractor: match?.location.contractor || "",
+      package: match?.location.package || "",
+      hasPolygon: destinationAreas.has(name),
+      hasAccessPoint: Boolean(match),
+      reachable: null
+    };
+  });
+}
+
+function renderDestinationOptions() {
+  const previous = $("end").value;
+  const query = searchKey($("destinationSearch").value);
+  const contractorFiltered = selectedContractors.size > 0;
+  const typeFiltered = selectedDestinationTypes.size > 0;
+  const matchesFilters = item =>
+    (!contractorFiltered || selectedContractors.has(item.contractor)) &&
+    (!typeFiltered || selectedDestinationTypes.has(String(item.type || "").toUpperCase()));
+  const matching = destinationOptions.filter(item =>
+    matchesFilters(item) && searchKey(item.name).includes(query)
+  );
+  const optionValue = item => item.hasAccessPoint ? String(item.index) : "missing:" + item.name;
+  const selected = destinationOptions.find(item => optionValue(item) === previous && matchesFilters(item));
+  const visible = [...matching];
+  const retained = selected && !visible.some(item => item.index === selected.index);
+  if (retained) visible.push(selected);
+  visible.sort((a, b) => {
+    const left = searchKey(a.name);
+    const right = searchKey(b.name);
+    const rank = value => !query ? 0 : value === query ? 0 : value.startsWith(query) ? 1 : 2;
+    return rank(left) - rank(right) || a.name.localeCompare(b.name, undefined, { numeric: true });
+  });
+  const end = $("end");
+  const pickerToggle = $("destinationPickerToggle");
+  const pickerList = $("destinationPickerList");
+  end.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = matching.length ? "Select destination…" : "No destinations match";
+  end.appendChild(placeholder);
+  for (const item of visible) {
+    const option = document.createElement("option");
+    option.value = item.hasAccessPoint ? String(item.index) : "missing:" + item.name;
+    option.textContent = item.name +
+      (item.contractor ? " — " + item.contractor : "") +
+      (item.reachable === false ? " — no route found" : "");
+    if (item.reachable === false) option.style.color = "#c62828";
+    end.appendChild(option);
+  }
+  end.value = selected ? previous : "";
+  if (pickerToggle) {
+    pickerToggle.textContent = selected
+      ? selected.name + (selected.contractor ? " — " + selected.contractor : "")
+      : (matching.length ? "Select destination…" : "No destinations match");
+    pickerToggle.disabled = end.disabled;
+  }
+  if (pickerList) {
+    pickerList.replaceChildren();
+    for (const item of visible) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "destination-picker-option";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(Boolean(selected && optionValue(selected) === optionValue(item))));
+      if (item.reachable === false) option.classList.add("is-unreachable");
+      option.textContent = item.name +
+        (item.contractor ? " — " + item.contractor : "") +
+        (item.reachable === false ? " — no route found" : "");
+      option.addEventListener("click", () => {
+        end.value = optionValue(item);
+        pickerToggle.textContent = item.name + (item.contractor ? " — " + item.contractor : "");
+        pickerToggle.setAttribute("aria-expanded", "false");
+        pickerList.hidden = true;
+        end.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      pickerList.appendChild(option);
+    }
+    if (!visible.length) {
+      const empty = document.createElement("p");
+      empty.className = "destination-picker-empty";
+      empty.textContent = "No matching destinations.";
+      pickerList.appendChild(empty);
+    }
+  }
+  const activeFilterCount = selectedContractors.size + selectedDestinationTypes.size;
+  $("searchStatus").textContent = matching.length + " matching destination(s)" +
+    (activeFilterCount ? " with " + activeFilterCount + " filter(s) applied" : "") +
+    (retained ? ". Current selection retained." : ".");
+  const clearFilters = $("contractorFilterClear");
+  if (clearFilters) clearFilters.disabled = activeFilterCount === 0;
+}
+
+
+/* URL AND SHARING */
+
+function updateDestinationUrl(destinationName = null) {
+  try {
+    const url = new URL(window.location.href);
+
+    if (destinationName === null) {
+      url.searchParams.delete("destination");
+    } else {
+      url.searchParams.set("destination", destinationName);
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.href
+    );
+
+  } catch (error) {
+    console.warn("Could not update destination URL:", error);
+  }
+}
+
+
+function selectedDestination() {
+  const value = $("end").value;
+  if (value === "") return null;
+
+  if (value.startsWith("missing:")) {
+    const name = value.slice("missing:".length);
+    const item = destinationOptions.find(option => option.name === name);
+    if (!item) return null;
+    return {
+      ...item,
+      kind: "destination",
+      offset: Infinity,
+      node: null,
+      valid: false,
+      nearestRoadType: ""
+    };
+  }
+
+  const index = Number(value);
+  if (!Number.isInteger(index)) return null;
+  const location = locations[index];
+  return location?.kind === "destination" ? location : null;
+}
+
+
+function refreshShareControls() {
+  const destination = selectedDestination();
+
+  $("copyLink").disabled = !destination;
+  $("shareFallback").hidden = true;
+
+  $("shareStatus").textContent = destination
+    ? "Copy a link to " + destination.name + "."
+    : "Select a destination to create a link.";
+}
+
+
+async function copyDestinationLink() {
+  const destination = selectedDestination();
+  if (!destination) return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("destination", destination.name);
+
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("Clipboard access unavailable.");
+    }
+
+    await navigator.clipboard.writeText(url.href);
+
+    $("shareFallback").hidden = true;
+    $("shareStatus").textContent =
+      "Link copied for " + destination.name + ".";
+
+  } catch (error) {
+    $("shareFallback").hidden = false;
+    $("shareLink").value = url.href;
+    $("shareLink").focus();
+    $("shareLink").select();
+
+    $("shareStatus").textContent =
+      "Automatic copy was unavailable. " +
+      "Copy the selected link below manually.";
+  }
+}
+
+
+function loadDestinationFromUrl() {
+  const requested = new URLSearchParams(
+    window.location.search
+  ).get("destination");
+
+  if (requested === null) return;
+
+  const index = locations.findIndex(location => {
+    return (
+      location.kind === "destination" &&
+      location.name === requested
+    );
+  });
+
+  if (index === -1) {
+    status(
+      "Shared destination not found: " + requested +
+      "\nCheck its exact Name value or select a LAAR manually."
+    );
+    return;
+  }
+
+  $("destinationSearch").value = "";
+  renderDestinationOptions();
+
+  $("startMode").value = "gate";
+  $("end").value = String(index);
+
+  // The destination selector may be filtered to destinations reachable
+  // from a valid gate for the active vehicle. Do not attempt to calculate
+  // when the requested shared destination was excluded from that selector.
+  if ($("end").value !== String(index)) {
+    status(
+      "Shared destination is not available for the current vehicle/start. " +
+      "Select a reachable LAAR manually."
+    );
+    refreshShareControls();
+    return;
+  }
+
+  refreshShareControls();
+  clearRoute();
+  $("start").selectedIndex = -1;
+  status("Shared destination loaded. Press Show / update LAAR route to calculate it.");
+}
+
+
+/* ROUTE SUMMARY */
+
+function calculate(collapseMobilePanelOnSuccess = false) {
+  window.laarRouteAvailable = false;
+  document.dispatchEvent(new CustomEvent("laar-route-state-change"));
+  clearRoute();
+  clearRouteDebugHighlight();
+  clearRouteFailureBanner();
+  $("start").selectedIndex = -1;
+
+  const baseGraph = adjacency;
+
+  try {
+    if (!roads.length) throw new Error("No eligible roads for " + vehicleMode + ".");
+    const destination = selectedDestination();
+
+    if (!destination) {
+      throw new Error("Select a LAAR destination.");
+    }
+
+    updateDestinationUrl(destination.name);
+    refreshShareControls();
+
+    showDestinationArea(destination);
+
+    if (!destination.valid) {
+      if (!Number.isFinite(destination.offset)) {
+        if (destination.nearestRoadType) {
+          const roadType = destination.nearestRoadType === "haul"
+            ? "haul road" : destination.nearestRoadType === "public"
+              ? "public road" : "mapped road";
+          throw new Error(
+            "Nearest road is a " + roadType + " not permitted for " +
+            vehicleMode + "."
+          );
+        }
+        throw new Error("No mapped road attachment for this LAAR.");
+      }
+      throw new Error(
+        "LAAR is " + destination.offset.toFixed(0) +
+        " m from its nearest permitted road; limit " + MAX_SNAP + " m."
+      );
+    }
+
+    const liveMode = $("startMode").value === "live";
+    const prepared = prepareRoutingStart();
+
+    const allowedRoadIds = new Set(roads.map(road => road.id));
+    adjacency = new Map([...prepared.graph].map(([id, edges]) => [
+      id, edges.filter(edge => allowedRoadIds.has(edge.roadId))
+    ]));
+
+    const best = new Map();
+    const previous = new Map();
+    const source = new Map();
+    const visited = new Set();
+
+    for (const start of prepared.sources) {
+      const id = start.location.node;
+
+      if (!best.has(id)) {
+        best.set(id, 0);
+        source.set(id, start);
+      }
+    }
+
+    const end = destination.node;
+
+    while (true) {
+      let current = null;
+      let distance = Infinity;
+
+      for (const [id, value] of best) {
+        if (!visited.has(id) && value < distance) {
+          current = id;
+          distance = value;
+        }
+      }
+
+      if (current === null || current === end) break;
+
+      visited.add(current);
+
+      for (const edge of adjacency.get(current) || []) {
+        if (edge.roadId !== undefined && edge.roadId !== null) {
+          routeDebugRoadIds.add(edge.roadId);
+        }
+        if (visited.has(edge.to)) continue;
+
+        // Dijkstra minimizes travel time using the speed of each road link.
+        const candidate = distance + edge.seconds;
+
+        if (candidate < (best.get(edge.to) ?? Infinity)) {
+          best.set(edge.to, candidate);
+
+          previous.set(edge.to, {
+            from: current,
+            edge
+          });
+
+          source.set(edge.to, source.get(current));
+        }
+      }
+    }
+
+    if (!best.has(end)) {
+      throw new Error(
+        liveMode
+          ? "No connected road route from your attached position."
+          : $("startMode").value === "map"
+            ? "No connected route from this map click to the selected LAAR. Try a nearby click or check the road network connections."
+            : "No valid gate has a connected route to this LAAR."
+      );
+    }
+
+    const start = source.get(end);
+    if (!start) throw new Error("Starting point unavailable.");
+
+    if (start.index !== null) {
+      $("start").value = String(start.index);
+      updateGateHighlights(start.index);
+    }
+
+    const edges = [];
+    let id = end;
+
+    while (id !== start.location.node) {
+      const step = previous.get(id);
+      if (!step) throw new Error("Cannot reconstruct route.");
+
+      edges.push(step.edge);
+      id = step.from;
+    }
+
+    edges.reverse();
+
+    const networkMetres = edges.reduce(
+      (sum, edge) => sum + edge.length, 0
+    );
+    const originOffset = Number(start.location.offset) || 0;
+    const metres = networkMetres + originOffset;
+    const seconds = edges.reduce(
+      (sum, edge) => sum + edge.seconds, 0
+    ) + originOffset / (routeEstimateSpeedKmh / 3.6);
+
+    if (edges.length) {
+      const points = [];
+
+      // The solid route starts at the road attachment point. The off-road
+      // gap from the selected origin is shown separately as a light dashed line.
+      if (start.location.snapPoint) points.push(start.location.snapPoint);
+      for (const edge of edges) {
+        for (const point of edge.pts) {
+          if (
+            !points.length ||
+            dist(points[points.length - 1], point) > 0.000001
+          ) {
+            points.push(point);
+          }
+        }
+      }
+
+      if (start.location.point && start.location.snapPoint &&
+          dist(start.location.point, start.location.snapPoint) > 0.000001) {
+        startConnectorLayer = L.polyline([
+          ll(start.location.point),
+          ll(start.location.snapPoint)
+        ], {
+          color: themeColor("--map-origin-connector"),
+          weight: 3,
+          opacity: 0.95,
+          dashArray: "5 7",
+          lineCap: "round",
+          pane: "routePane"
+        }).addTo(map);
+      }
+      if (points.length >= 2) {
+        // Draw a slim white casing first so the blue route remains distinct
+        // where it overlaps or runs close to other mapped lines.
+        routeOutlineLayer = L.polyline(points.map(ll), {
+          color: themeColor("--map-location-outline"),
+          weight: 10,
+          opacity: 1,
+          lineCap: "round",
+          lineJoin: "round",
+          pane: "routePane",
+          interactive: false
+        }).addTo(map);
+        routeLayer = L.polyline(points.map(ll), {
+          color: themeColor("--map-route"),
+          weight: themeNumber("--map-route-width"),
+          opacity: 1,
+          lineCap: "round",
+          lineJoin: "round",
+          pane: "routePane"
+        }).addTo(map);
+        window.laarRouteAvailable = true;
+        document.dispatchEvent(new CustomEvent("laar-route-state-change"));
+      }
+    }
+
+    const roadNames = [];
+
+    for (const edge of edges) {
+      if (edge.topologyConnection) continue;
+      if (roadNames[roadNames.length - 1] !== edge.name) {
+        roadNames.push(edge.name);
+      }
+    }
+
+    showRouteSummary(
+      destination, start, metres, seconds, roadNames, liveMode
+    );
+    // Showing a live route is a preview only. Activate camera-following only
+    // after the user presses Start route; keep it active during a real reroute.
+    liveNavigationActive = liveMode && journeyStartConfirmed;
+
+    status(
+      "Route ready for " + destination.name + ".\n" +
+      (liveMode
+        ? "Live navigation follows your position and checks for route deviations."
+        : $("startMode").value === "map"
+          ? "Route starts at the selected map point."
+          : "The selected starting gate is highlighted in teal.")
+    );
+
+    if (!liveNavigationActive) fitSelectedResult();
+    if (collapseMobilePanelOnSuccess) {
+      document.dispatchEvent(new CustomEvent("laar-route-ready"));
+    }
+
+  } catch (error) {
+    console.error(error);
+    const routeFailure = Boolean(selectedDestination());
+    if (!liveNavigationActive) fitSelectedResult(routeFailure);
+    if (routeFailure) {
+      showRouteFailureBanner("No route found");
+      status("No route found for the selected destination and vehicle.");
+    } else {
+      status("Routing error: " + error.message);
+    }
+    liveNavigationActive = false;
+
+  } finally {
+    adjacency = baseGraph;
+  }
+}
+
+
+function hideMapLoadingDialog() {
+  const dialog = document.getElementById("mapLoadingDialog");
+  if (dialog) dialog.classList.add("is-hidden");
+}
+
+
+/* INITIALISE */
+
+async function init() {
+  try {
+    const required = [
+      "vehicleType", "map", "status", "start", "end", "clear", "fit",
+      "startMode", "locate", "stopLocation", "locationStatus",
+      "destinationSearch", "searchStatus", "copyLink",
+      "shareStatus", "shareFallback", "shareLink",
+      "routeSummary", "summaryDestination", "summaryStart",
+      "summaryDistance", "summaryTime", "routeDetails", "networkDate"
+    ];
+
+    for (const id of required) {
+      if (!$(id)) {
+        throw new Error("index.html is missing id='" + id + "'.");
+      }
+    }
+
+    const controlIds = [
+      "vehicleType", "start", "end", "clear", "fit", "startMode",
+      "locate", "stopLocation", "destinationSearch", "copyLink"
+    ];
+
+    controlIds.forEach(id => $(id).disabled = true);
+
+    if (typeof L === "undefined" || typeof proj4 === "undefined") {
+      throw new Error("Leaflet or Proj4 did not load.");
+    }
+
+    map = L.map("map", {
+      zoomControl: false,
+      attributionControl: false,
+      maxBoundsViscosity: 1,
+      scrollWheelZoom: true,
+      preferCanvas: true,
+      renderer: L.canvas({ padding: 0.5 })
+    });
+
+    map.on("mousemove", event => setMapClickHoverCursor(event.latlng));
+    map.on("mouseout", () => setMapClickHoverCursor(null));
+    map.on("click", event => {
+      if ($("startMode")?.value !== "map") return;
+      if (typeof setMapClickOrigin !== "function") {
+        const message = "Map click received, but origin-selection code is unavailable.";
+        if (typeof locationStatus === "function") locationStatus(message);
+        status(message);
+        console.error(message);
+        return;
+      }
+
+      try {
+        status("Map click received. Finding the nearest permitted road…");
+        setMapClickOrigin(event.latlng);
+      } catch (error) {
+        const message = "Map click failed: " + (error?.message || String(error));
+        if (typeof locationStatus === "function") locationStatus(message);
+        status(message);
+        console.error(error);
+      }
+    });
+
+    document.addEventListener("laar-mobile-layout-settled", () => {
+      if (!window.matchMedia("(max-width: 760px)").matches) return;
+      map.invalidateSize({ pan: false, animate: false });
+      fitSelectedResult();
+    });
+
+    map.createPane("roadCasingPane");
+    map.getPane("roadCasingPane").style.zIndex = "290";
+
+    map.createPane("siteReferenceRoads");
+    map.getPane("siteReferenceRoads").style.zIndex = "300";
+
+    map.createPane("selectedLaarPane");
+    map.getPane("selectedLaarPane").style.zIndex = "500";
+
+    map.createPane("routePane");
+    map.getPane("routePane").style.zIndex = "450";
+
+    map.createPane("gateMarkerPane");
+    map.getPane("gateMarkerPane").style.zIndex = "670";
+
+    map.createPane("liveLocationPane");
+    map.getPane("liveLocationPane").style.zIndex = "700";
+
+    L.control.scale({ imperial: false }).addTo(map);
+
+    const pending = new Set([
+      ROADS_FILE, "data/gates.geojson",
+      "data/destinations.geojson", "data/meta.json", "data/destination_areas.geojson"
+    ]);
+
+    let failed = false;
+
+    async function load(filename, optional = false) {
+      const loadStartedAt = performance.now();
+      try {
+        const data = await read(filename, optional);
+        window.recordMapLoadTiming?.("Load and parse " + filename, loadStartedAt);
+        pending.delete(filename);
+
+        if (!failed) {
+          status(
+            pending.size
+              ? "Loading:\n" + [...pending].join("\n")
+              : "Files loaded. Preparing network…"
+          );
+        }
+
+        return data;
+
+      } catch (error) {
+        window.recordMapLoadTiming?.("Failed loading " + filename, loadStartedAt);
+        failed = true;
+        throw error;
+      }
+    }
+
+    status("Loading network files…");
+
+    // Load and render the visible map geometry first. Routing inputs are fetched
+    // afterwards so graph construction cannot delay the first useful map frame.
+    const [r, areas] = await Promise.all([
+      load(ROADS_FILE),
+      load("data/destination_areas.geojson")
+    ]);
+
+    const visibleGeometryStartedAt = performance.now();
+    loadDestinationAreas(areas);
+
+    const roadTypeOrder = { local: 0, minor: 1, major: 2, main: 2, public: 3, haul: 4 };
+    const orderedRoadData = {
+      ...r,
+      features: [...(r.features || [])].sort((a, b) => {
+        const typeA = String(a.properties?.type || "").trim().toLowerCase();
+        const typeB = String(b.properties?.type || "").trim().toLowerCase();
+        return (roadTypeOrder[typeA] ?? -1) - (roadTypeOrder[typeB] ?? -1);
+      })
+    };
+
+    const roadCasingLayer = L.geoJSON(orderedRoadData, {
+      pane: "roadCasingPane",
+      smoothFactor: 1.5,
+      interactive: false,
+      style: roadCasingStyle
+    });
+
+    let roadLayer = L.geoJSON(orderedRoadData, {
+      pane: "siteReferenceRoads",
+      smoothFactor: 1.5,
+      style: roadStyle,
+      onEachFeature: bindRoadPopup
+    });
+    displayedRoadLayer = roadLayer;
+    displayedRoadLayerGroup = L.layerGroup([roadCasingLayer, roadLayer]).addTo(map);
+
+    siteBounds = roadLayer.getBounds();
+    if (!siteBounds.isValid()) throw new Error("Invalid map extent.");
+    if (destinationAreas.size) {
+      const areaBounds = L.geoJSON({
+        type: "FeatureCollection",
+        features: [...destinationAreas.values()].flat()
+      }).getBounds();
+      if (areaBounds.isValid()) siteBounds.extend(areaBounds);
+    }
+
+    map.invalidateSize({ pan: false, animate: false });
+    map.fitBounds(siteBounds, { padding: [20, 20], animate: false });
+    window.recordMapLoadTiming?.("Prepare and render initial boundary and road geometry", visibleGeometryStartedAt);
+    window.initialMapGeometryReady = true;
+    document.dispatchEvent(new Event("laar-initial-map-rendered"));
+
+    // Let the browser paint the map before fetching/building the routing graph.
+    const paintWaitStartedAt = performance.now();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    window.recordMapLoadTiming?.("Wait for initial map paint", paintWaitStartedAt);
+
+    const routingDataStartedAt = performance.now();
+    const [g, d, metadata, topology] = await Promise.all([
+      load("data/gates.geojson"),
+      load("data/destinations.geojson"),
+      load("data/meta.json", true),
+      load("data/routing-network.json", true)
+    ]);
+
+    if (
+      typeof prepareRoutingStart !== "function" ||
+      typeof initialiseLocationControls !== "function"
+    ) {
+      throw new Error(
+        "live-location.js did not load. Check script order."
+      );
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    window.recordMapLoadTiming?.("Load routing data set", routingDataStartedAt);
+    prebuiltRoutingNetwork = topology?.schemaVersion === 1 ? topology : null;
+    networkInputs = { r, g, d, metadata };
+    vehicleMode = $("vehicleType").value;
+    const networkBuildStartedAt = performance.now();
+    const invalidAccessCount = reportAccessData(r);
+    if (!prebuiltRoutingNetwork) console.warn("Backend routing network unavailable; using browser graph build.");
+    else console.info("Using backend routing network", prebuiltRoutingNetwork.statistics);
+    await build(null, r, g, d, metadata);
+    window.recordMapLoadTiming?.("Build selected vehicle routing network (" + vehicleMode + ")", networkBuildStartedAt);
+
+    const reviewed =
+      metadata?.network_reviewed_at ??
+      metadata?.routing?.network_reviewed_at;
+
+    $("networkDate").textContent =
+      reviewed === undefined ||
+      reviewed === null ||
+      String(reviewed).trim() === ""
+        ? "Not recorded"
+        : String(reviewed);
+
+    // Road geometry is already visible; map clicks are handled by Leaflet's map-level event.
+       const movementBounds = siteBounds.pad(1.0);
+    map.setMaxBounds(movementBounds);
+    map.setMinZoom(Math.max(0, map.getBoundsZoom(movementBounds) - 1));
+    map.invalidateSize({ pan: false, animate: false });
+    const initialCenter = roadNetworkCenter();
+    const initialZoom = Math.log2(
+      156543.03392804097 * Math.cos(initialCenter.lat * Math.PI / 180) *
+      SCALE_BAR_MAX_WIDTH / INITIAL_SCALE_BAR_METRES
+    );
+    map.setView(initialCenter, initialZoom, { animate: false });
+    const sidebarWidth = document.querySelector("body > aside")?.getBoundingClientRect().width || 0;
+    const horizontalOffset = window.matchMedia("(max-width: 760px)").matches
+      ? 0
+      : sidebarWidth / 2;
+    if (horizontalOffset) map.panBy([horizontalOffset, 0], { animate: false });
+
+    gateMarkers = new Map();
+    gateMarkerLayer = L.layerGroup().addTo(map);
+    if (window.laarLayerControl) {
+      window.laarLayerControl.addOverlay(gateMarkerLayer, "Gates");
+    }
+    destinationOptions = [];
+
+    $("start").replaceChildren();
+
+    const missingPolygons = [];
+
+    locations.forEach((location, index) => {
+      if (location.kind === "gate") {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = location.name;
+        $("start").appendChild(option);
+
+        const marker = L.marker(ll(location.point), {
+          icon: createGateIcon(),
+          pane: "gateMarkerPane",
+          title: location.name,
+          alt: "Site gate: " + location.name,
+          keyboard: true,
+          riseOnHover: true
+        }).addTo(gateMarkerLayer);
+
+        const label = document.createElement("span");
+        label.textContent = location.name;
+
+        marker.bindTooltip(label, {
+          permanent: true,
+          direction: "top",
+          offset: [0, 0],
+          className: "laar-gate-label"
+        });
+
+        marker.bindPopup(createGatePopup(location), {
+          className: "laar-gate-popup",
+          minWidth: 240,
+          maxWidth: 290,
+          autoPanPadding: [20, 20]
+        });
+
+        gateMarkers.set(index, marker);
+
+      } else {
+        if (!destinationAreas.has(location.name)) missingPolygons.push(location.name);
+      }
+    });
+
+    buildDestinationOptions();
+
+    if (!destinationOptions.length) {
+      throw new Error("No destination areas.");
+    }
+
+    $("start").selectedIndex = -1;
+    $("start").disabled = true;
+    $("startMode").value = "gate";
+
+    $("vehicleType").disabled = false;
+    $("vehicleType").onchange = changeVehicle;
+    document.querySelectorAll('input[name="vehicleTypeChoice"]').forEach(radio => {
+      radio.checked = radio.value === $("vehicleType").value;
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        $("vehicleType").value = radio.value;
+        $("vehicleType").dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+    document.querySelectorAll('input[name="startModeChoice"]').forEach(radio => {
+      radio.checked = radio.value === $("startMode").value;
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        $("startMode").value = radio.value;
+        $("startMode").dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+
+    $("destinationSearch").disabled = false;
+    $("end").disabled = false;
+    const contractorToggle = $("contractorFilterToggle");
+    const contractorDialog = $("contractorFilterDialog");
+    const filterGroups = [
+      {id: "contractorFilterOptions", field: "contractor", selected: selectedContractors},
+      {id: "destinationTypeFilterOptions", field: "type", selected: selectedDestinationTypes, values: ["Office", "LAAR", "WAN"]}
+    ];
+    const closeContractorDialog = () => {
+      if (contractorDialog) contractorDialog.hidden = true;
+      if (contractorToggle) contractorToggle.checked = false;
+    };
+    const scrollMobilePlannerToBottom = () => {
+      if (!window.matchMedia("(max-width: 760px)").matches) return;
+      requestAnimationFrame(() => {
+        const panel = $("navigationPanel");
+        if (panel) panel.scrollTo({ top: panel.scrollHeight, behavior: "smooth" });
+      });
+    };
+    const renderDestinationFilterOptions = () => {
+      for (const group of filterGroups) {
+        const container = $(group.id);
+        if (!container) continue;
+        container.replaceChildren();
+        const values = group.values || [...new Set(destinationOptions.map(item => String(item[group.field] || "").trim()).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, undefined, {numeric: true}));
+        for (const value of values) {
+          const label = document.createElement("label");
+          label.className = "contractor-filter-option";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.value = value;
+          input.checked = group.selected.has(value) || (group.field === "type" && group.selected.has(value.toUpperCase()));
+          input.addEventListener("change", () => {
+            if (input.checked) group.selected.add(value);
+            else group.selected.delete(value);
+            renderDestinationOptions();
+          });
+          const text = document.createElement("span");
+          text.textContent = value;
+          label.append(input, text);
+          container.appendChild(label);
+        }
+      }
+    };
+    if (contractorToggle && contractorDialog) {
+      contractorToggle.disabled = false;
+      renderDestinationFilterOptions();
+      contractorToggle.addEventListener("change", () => {
+        contractorDialog.hidden = !contractorToggle.checked;
+        if (contractorToggle.checked) scrollMobilePlannerToBottom();
+      });
+      $("contractorFilterClose")?.addEventListener("click", closeContractorDialog);
+      $("contractorFilterClear")?.addEventListener("click", () => {
+        selectedContractors.clear();
+        selectedDestinationTypes.clear();
+        renderDestinationFilterOptions();
+        renderDestinationOptions();
+      });
+      document.addEventListener("click", event => {
+        if (event.target.closest(".contractor-filter-wrap, .destination-filter-bar")) return;
+        if (!contractorDialog.hidden) closeContractorDialog();
+      });
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !contractorDialog.hidden) closeContractorDialog();
+      });
+    }
+    const pickerToggle = $("destinationPickerToggle");
+    const pickerList = $("destinationPickerList");
+    if (pickerToggle && pickerList) {
+      pickerToggle.disabled = false;
+      pickerToggle.addEventListener("click", () => {
+        const opening = pickerList.hidden;
+        pickerList.hidden = !opening;
+        pickerToggle.setAttribute("aria-expanded", String(opening));
+        if (opening) scrollMobilePlannerToBottom();
+      });
+      document.addEventListener("click", event => {
+        if (event.target.closest("#destinationPickerToggle, #destinationPickerList")) return;
+        pickerList.hidden = true;
+        pickerToggle.setAttribute("aria-expanded", "false");
+      });
+      pickerToggle.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+          pickerList.hidden = true;
+          pickerToggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+    $("clear").disabled = false;
+    $("fit").disabled = false;
+
+    $("destinationSearch").oninput = renderDestinationOptions;
+
+    // Enter in the search box only filters the list; it must not silently
+    // select a destination or start routing.
+    $("destinationSearch").onkeydown = event => {
+      if (event.key === "Enter") event.preventDefault();
+    };
+
+    renderDestinationOptions();
+
+    $("end").onchange = () => {
+      if ($("end").value === "") {
+        clearRoute();
+        $("start").selectedIndex = -1;
+        updateDestinationUrl();
+        refreshShareControls();
+        status("Select a destination.");
+      } else {
+        calculate();
+      }
+    };
+
+    $("copyLink").onclick = copyDestinationLink;
+
+    $("clear").onclick = () => {
+      clearRoute();
+
+      $("start").selectedIndex = -1;
+      $("end").value = "";
+      $("destinationSearch").value = "";
+
+      renderDestinationOptions();
+      updateDestinationUrl();
+      refreshShareControls();
+
+      status(
+        "Selection cleared.\n" +
+        ($("startMode").value === "live"
+          ? "Location tracking is unchanged. Use Stop location to stop it."
+          : "Select another LAAR.")
+      );
+    };
+
+    $("fit").onclick = () => {
+      map.fitBounds(siteBounds.pad(0.1));
+    };
+
+    initialiseLocationControls();
+    refreshShareControls();
+    addMapLegend();
+
+    const gateCount = locations.filter(item => {
+      return item.kind === "gate" && item.valid;
+    }).length;
+    const permittedRoadIds = new Set(roads.map(road => road.id));
+    const reachableFromGates = new Set();
+    const queue = locations
+      .filter(item => item.kind === "gate" && item.valid && item.node !== null)
+      .map(item => item.node);
+    for (const node of queue) reachableFromGates.add(node);
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      for (const edge of adjacency.get(queue[cursor]) || []) {
+        if (!permittedRoadIds.has(edge.roadId) || reachableFromGates.has(edge.to)) continue;
+        reachableFromGates.add(edge.to);
+        queue.push(edge.to);
+      }
+    }
+    const health = {
+      roads: features(r, ROADS_FILE).length,
+      permittedRoads: roads.length,
+      invalidAccessRoads: invalidAccessCount,
+      validGates: gateCount,
+      invalidGates: locations.filter(item => item.kind === "gate" && !item.valid).length,
+      unavailableDestinations: locations.filter(item => item.kind === "destination" && !item.valid).length,
+      disconnectedDestinations: locations.filter(item =>
+        item.kind === "destination" && item.valid &&
+        (item.node === null || !reachableFromGates.has(item.node))
+      ).length,
+      missingDestinationPolygons: missingPolygons.length,
+      duplicateDestinations: ignoredDestinationNames.length
+    };
+    console.info("LAAR network health", health);
+
+    status(
+      "Vehicle: " + vehicleMode + ". " + roads.length + " eligible roads, " +
+      destinationOptions.length + " unique destinations.\n" +
+      "Valid gates: " + gateCount + ". " +
+      "Snap limit: " + MAX_SNAP + " m.\n" +
+      "Blocked roads with invalid access fields: " + invalidAccessCount + ".\n" +
+      "Skipped duplicate centroids: " +
+      ignoredDestinationNames.length + "." +
+      (missingPolygons.length
+        ? "\nMissing polygon matches: " + missingPolygons.join(", ")
+        : "")
+    );
+
+    // Start in live-location mode so the user's current position is shown
+    // automatically on launch. The browser may ask for location permission.
+    // Shared-link destinations are not restored automatically on refresh.
+    $("startMode").value = "live";
+    document.querySelectorAll('input[name="startModeChoice"]').forEach(radio => {
+      radio.checked = radio.value === $("startMode").value;
+    });
+    $("start").selectedIndex = -1;
+    $("end").value = "";
+    $("destinationSearch").value = "";
+    $("searchStatus").textContent = "";
+    $("shareFallback").hidden = true;
+    $("shareLink").value = "";
+    updateDestinationUrl();
+    clearRoute();
+    refreshShareControls();
+    locationStatus("Requesting your current location…");
+    status(
+      "Vehicle: " + vehicleMode + ". " + roads.length + " eligible roads. " +
+      "Waiting for your current location."
+    );
+    $("locate").disabled = false;
+    startLiveLocation();
+    window.laarNetworkBuildReady = true;
+    hideMapLoadingDialog();
+    window.recordMapLoadTiming?.("Application initialisation total", window.mapLoadTimingState?.startedAt ?? performance.now());
+    window.updateMapLoadTimingSummary?.();
+
+  } catch (error) {
+    for (const id of [
+      "vehicleType", "start", "end", "clear", "fit", "startMode",
+      "locate", "stopLocation", "destinationSearch", "copyLink"
+    ]) {
+      if ($(id)) $(id).disabled = true;
+    }
+
+    status("Setup error: " + error.message);
+    hideMapLoadingDialog();
+    console.error(error);
+  }
+}
+
+
+/* Initialisation is started by main.js after all modules load. */

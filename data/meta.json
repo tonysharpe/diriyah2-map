@@ -1,0 +1,10 @@
+{
+  "network_id": "NETWORK-001",
+  "version": 1,
+  "name": "Temporary Network",
+  "distance_units": "meters",
+  "routing": {
+    "cost": "time",
+    "distance_units": "meters"
+  }
+}
