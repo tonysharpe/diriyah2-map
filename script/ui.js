@@ -44,6 +44,95 @@
     setExpanded(!expanded);
   });
 
+  // Android/iOS bottom-sheet gestures. Capture touch events at document
+  // level so child elements and browser event retargeting do not swallow them.
+  const header = panel.querySelector(".site-header");
+  if (header) {
+    let gesture = null;
+    let suppressHeaderClick = false;
+
+    header.addEventListener("click", function (event) {
+      if (suppressHeaderClick) {
+        suppressHeaderClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (event.target.closest("button, a, input, select, label")) return;
+      setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+    });
+
+    document.addEventListener("touchstart", function (event) {
+      if (!mobileQuery.matches || event.touches.length !== 1) {
+        gesture = null;
+        return;
+      }
+      const target = event.target;
+      if (!target || !header.contains(target)) {
+        gesture = null;
+        return;
+      }
+      const touch = event.touches[0];
+      gesture = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+        vertical: false
+      };
+    }, { capture: true, passive: true });
+
+    document.addEventListener("touchmove", function (event) {
+      if (!mobileQuery.matches || !gesture || event.touches.length !== 1) return;
+      const touch = Array.from(event.touches).find(
+        item => item.identifier === gesture.identifier
+      );
+      if (!touch) return;
+
+      const dx = touch.clientX - gesture.startX;
+      const dy = touch.clientY - gesture.startY;
+      gesture.lastX = touch.clientX;
+      gesture.lastY = touch.clientY;
+
+      // Lock only clear vertical drags; leave horizontal movement alone.
+      if (Math.abs(dy) >= 8 && Math.abs(dy) > Math.abs(dx) * 1.1) {
+        gesture.vertical = true;
+        if (event.cancelable) event.preventDefault();
+      }
+    }, { capture: true, passive: false });
+
+    document.addEventListener("touchend", function (event) {
+      if (!mobileQuery.matches || !gesture) {
+        gesture = null;
+        return;
+      }
+      const touch = Array.from(event.changedTouches).find(
+        item => item.identifier === gesture.identifier
+      );
+      if (!touch) return;
+
+      const dx = touch.clientX - gesture.startX;
+      const dy = touch.clientY - gesture.startY;
+      const wasVertical = gesture.vertical;
+      gesture = null;
+
+      // A deliberate vertical swipe, rather than a tap or horizontal drag.
+      if (!wasVertical || Math.abs(dy) < 28 ||
+          Math.abs(dy) < Math.abs(dx) * 1.1) return;
+
+      suppressHeaderClick = true;
+      window.setTimeout(function () {
+        suppressHeaderClick = false;
+      }, 600);
+      setExpanded(dy < 0);
+    }, { capture: true, passive: true });
+
+    document.addEventListener("touchcancel", function () {
+      gesture = null;
+    }, { capture: true, passive: true });
+  }
+
   // Do not auto-toggle the bottom sheet on viewport/media-query changes.
   // Mobile browser chrome and viewport resizes can otherwise cause visible flashing.
 
@@ -102,18 +191,25 @@
 })();
 
 
-/* Desktop-only collapsible Development Features section. */
+/* URL-gated collapsible Development Features section. */
 (function () {
   const section = document.querySelector(".development-section");
   const toggle = document.getElementById("developmentToggle");
   const content = document.getElementById("developmentContent");
-  const desktopQuery = window.matchMedia("(min-width: 761px)");
-
   if (!section || !toggle || !content) return;
 
+  // Development controls are available only through an explicit URL opt-in.
+  // Keep the whole section out of the layout unless the query is exactly
+  // ?dev=true (or includes &dev=true alongside other parameters).
+  const developmentEnabled =
+    new URLSearchParams(window.location.search).get("dev") === "true";
+  if (!developmentEnabled) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
   function setExpanded(expanded) {
-    // Do not permit expansion at mobile viewport widths.
-    if (!desktopQuery.matches) expanded = false;
     content.hidden = !expanded;
     toggle.setAttribute("aria-expanded", String(expanded));
     toggle.setAttribute("aria-label", (expanded ? "Collapse" : "Expand") + " Development Features");
@@ -121,19 +217,8 @@
   }
 
   toggle.addEventListener("click", function () {
-    if (!desktopQuery.matches) return;
     setExpanded(toggle.getAttribute("aria-expanded") !== "true");
   });
-
-  function syncViewport() {
-    if (!desktopQuery.matches) setExpanded(false);
-  }
-
-  if (typeof desktopQuery.addEventListener === "function") {
-    desktopQuery.addEventListener("change", syncViewport);
-  } else if (typeof desktopQuery.addListener === "function") {
-    desktopQuery.addListener(syncViewport);
-  }
 
   setExpanded(false);
 })();

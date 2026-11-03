@@ -246,6 +246,7 @@ async function changeVehicle() {
     $("start").selectedIndex = -1;
     refreshVehicleRoads();
     refreshShareControls();
+    updateDestinationUrl(retainedDestination?.name || null);
     mark("refresh map and controls", mapRefreshStartedAt);
 
     if (retainedDestination) {
@@ -1634,6 +1635,9 @@ function updateDestinationUrl(destinationName = null) {
       url.searchParams.set("destination", destinationName);
     }
 
+    // Keep the current vehicle in every shareable URL.
+    url.searchParams.set("vehicle", $("vehicleType").value || vehicleMode);
+
     window.history.replaceState(
       window.history.state,
       "",
@@ -1689,6 +1693,7 @@ async function copyDestinationLink() {
 
   const url = new URL(window.location.href);
   url.searchParams.set("destination", destination.name);
+  url.searchParams.set("vehicle", $("vehicleType").value || vehicleMode);
 
   try {
     if (!navigator.clipboard?.writeText) {
@@ -1719,16 +1724,15 @@ function loadDestinationFromUrl() {
     window.location.search
   ).get("destination");
 
-  if (requested === null) return;
+  if (requested === null || !requested.trim()) return;
 
-  const index = locations.findIndex(location => {
-    return (
-      location.kind === "destination" &&
-      location.name === requested
-    );
-  });
+  // Match against the same combined destination list used by the visible
+  // picker (including destinations represented by an area polygon only).
+  const destination = destinationOptions.find(item =>
+    searchKey(item.name) === searchKey(requested)
+  );
 
-  if (index === -1) {
+  if (!destination) {
     status(
       "Shared destination not found: " + requested +
       "\nCheck its exact Name value or select a LAAR manually."
@@ -1736,28 +1740,28 @@ function loadDestinationFromUrl() {
     return;
   }
 
+  // A URL is an explicit destination choice, so stale picker filters must
+  // not hide it or cause renderDestinationOptions() to clear the selection.
+  selectedContractors.clear();
+  selectedDestinationTypes.clear();
   $("destinationSearch").value = "";
-  renderDestinationOptions();
-
   $("startMode").value = "gate";
-  $("end").value = String(index);
+  $("end").value = destination.hasAccessPoint
+    ? String(destination.index)
+    : "missing:" + destination.name;
 
-  // The destination selector may be filtered to destinations reachable
-  // from a valid gate for the active vehicle. Do not attempt to calculate
-  // when the requested shared destination was excluded from that selector.
-  if ($("end").value !== String(index)) {
-    status(
-      "Shared destination is not available for the current vehicle/start. " +
-      "Select a reachable LAAR manually."
-    );
-    refreshShareControls();
-    return;
-  }
-
+  // Rebuild both the native select and the custom visible picker from the
+  // selected value so their labels and selected states stay in sync.
+  renderDestinationOptions();
   refreshShareControls();
   clearRoute();
   $("start").selectedIndex = -1;
-  status("Shared destination loaded. Press Show / update LAAR route to calculate it.");
+
+  status(
+    destination.hasAccessPoint
+      ? "Shared destination loaded: " + destination.name + ". Press Show / update LAAR route to calculate it."
+      : "Shared destination area loaded: " + destination.name + ". No mapped access point is available."
+  );
 }
 
 
@@ -2032,6 +2036,25 @@ async function init() {
     for (const id of required) {
       if (!$(id)) {
         throw new Error("index.html is missing id='" + id + "'.");
+      }
+    }
+
+    // Apply a vehicle supplied in the launch URL before building the routing
+    // graph, so the initial network and the visible vehicle choice agree.
+    const requestedVehicle = new URLSearchParams(window.location.search)
+      .get("vehicle");
+    const supportedVehicles = new Set([
+      "truck", "bus", "minibus", "pickup", "suv", "car"
+    ]);
+    if (requestedVehicle !== null) {
+      const normalizedVehicle = requestedVehicle.trim().toLowerCase();
+      if (supportedVehicles.has(normalizedVehicle)) {
+        $("vehicleType").value = normalizedVehicle;
+        document.querySelectorAll('input[name="vehicleTypeChoice"]').forEach(radio => {
+          radio.checked = radio.value === normalizedVehicle;
+        });
+      } else {
+        console.warn("Ignoring unsupported vehicle URL parameter:", requestedVehicle);
       }
     }
 
@@ -2384,7 +2407,7 @@ async function init() {
         contractorDialog.hidden = !contractorToggle.checked;
         if (contractorToggle.checked) scrollMobilePlannerToBottom();
       });
-      $("contractorFilterClose")?.addEventListener("click", closeContractorDialog);
+      $("contractorFilterApply")?.addEventListener("click", closeContractorDialog);
       $("contractorFilterClear")?.addEventListener("click", () => {
         selectedContractors.clear();
         selectedDestinationTypes.clear();
@@ -2528,14 +2551,25 @@ async function init() {
       radio.checked = radio.value === $("startMode").value;
     });
     $("start").selectedIndex = -1;
-    $("end").value = "";
     $("destinationSearch").value = "";
     $("searchStatus").textContent = "";
     $("shareFallback").hidden = true;
     $("shareLink").value = "";
-    updateDestinationUrl();
     clearRoute();
-    refreshShareControls();
+
+    // Apply a shared destination after all startup defaults have been set.
+    // The previous startup reset cleared the selection and removed the query
+    // parameter immediately after the URL loader had selected it.
+    const hasSharedDestination = new URLSearchParams(window.location.search)
+      .has("destination");
+    if (hasSharedDestination) {
+      loadDestinationFromUrl();
+    } else {
+      $("end").value = "";
+      updateDestinationUrl();
+      refreshShareControls();
+    }
+
     locationStatus("Requesting your current location…");
     status(
       "Vehicle: " + vehicleMode + ". " + roads.length + " eligible roads. " +
