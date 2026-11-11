@@ -58,11 +58,15 @@
       color = themeColor("--map-public-road");
     } else if (type === "haul") {
       color = themeColor("--map-haul-road");
+    } else if (type === "community") {
+      color = "#C4A484";
     }
 
     return {
       color,
-      weight: themeNumber("--map-road-width"),
+      weight: type === "community"
+        ? themeNumber("--map-road-width") * 0.55
+        : themeNumber("--map-road-width"),
       opacity: 1,
       dashArray: null,
       lineCap: "round",
@@ -74,7 +78,7 @@
     const type = roadField(feature.properties || {}, "type");
     return {
       color: (type === "major" || type === "main") ? themeColor("--map-major-road-outline") : themeColor("--map-road-outline"),
-      weight: (type === "major" || type === "main") ? 6 : 5.5,
+      weight: (type === "major" || type === "main") ? 6 : type === "community" ? 4 : 5.5,
       opacity: 1,
       lineCap: "round",
       lineJoin: "round"
@@ -180,6 +184,22 @@
             <span class="legend-symbol-haul-road" aria-hidden="true"><span></span></span>
             <span>Haul Roads</span>
           </div>
+          <div class="map-legend__row">
+            <svg class="map-key-svg" width="30" height="8" viewBox="0 0 30 8" aria-hidden="true"><path d="M3 4 H27" stroke="#C4A484" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Community Roads</span>
+          </div>
+
+          <div class="map-legend__row map-legend__row--road-names">
+            <span class="legend-road-name" aria-hidden="true">A12</span>
+            <span>Road Name</span>
+            <input
+              id="roadNameLabelsToggle"
+              class="map-legend__checkbox"
+              type="checkbox"
+              aria-label="Show road name labels"
+              checked
+            >
+          </div>
 
           <div class="map-legend__row">
             <span class="legend-symbol-route" aria-hidden="true"></span>
@@ -214,6 +234,16 @@
         content.hidden = expanded;
         icon.textContent = expanded ? "+" : "−";
       });
+
+      const roadNameCheckbox = container.querySelector("#roadNameLabelsToggle");
+      roadNameCheckbox.checked = window.roadNameLabelsVisible === true;
+      roadNameCheckbox.addEventListener("change", function () {
+        window.roadNameLabelsVisible = roadNameCheckbox.checked;
+        if (typeof window.setRoadNameLabelsVisible === "function") {
+          window.setRoadNameLabelsVisible(roadNameCheckbox.checked);
+        }
+      });
+
       L.DomEvent.disableClickPropagation(
         container
       );

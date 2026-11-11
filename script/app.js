@@ -67,7 +67,7 @@ function setMapClickHoverCursor(_latlng) {
   const container = map.getContainer();
   // Map-click mode accepts clicks anywhere; snapping and route eligibility
   // are resolved after the click rather than by the cursor hit-test.
-  const cursor = $("startMode")?.value === "map" ? "crosshair" : "";
+  const cursor = destinationSelectionMode || $("startMode")?.value === "map" ? "crosshair" : "";
   container.style.cursor = cursor;
   container.querySelectorAll(".leaflet-pane canvas, .leaflet-pane path.leaflet-interactive")
     .forEach(element => { element.style.cursor = cursor; });
@@ -85,7 +85,7 @@ function isRoundaboutLink(properties) {
 
 function roadAccess(properties, vehicle = vehicleMode) {
   const type = roadField(properties, "type");
-  const supportedTypes = ["major", "minor", "local", "public", "haul", "main"];
+  const supportedTypes = ["major", "minor", "local", "public", "haul", "community", "main"];
   const vehicleFields = ["car", "suv", "pickup", "minibus", "bus", "truck"];
   if (!supportedTypes.includes(type) || !vehicleFields.includes(vehicle)) return false;
   // Each vehicle is permitted only when its matching roads.geojson field is yes.
@@ -101,7 +101,8 @@ function roadStyle(feature) {
     minor: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
     local: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
     public: { color: "--map-public-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
-    haul: { color: "--map-haul-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 }
+    haul: { color: "--map-haul-road", outline: "--map-road-outline", width: "--map-road-width", casing: 5.5 },
+    community: { color: "--map-haul-road", outline: "--map-road-outline", width: "--map-road-width", casing: 4.5 }
   };
   const style = palette[type];
   return {
@@ -122,7 +123,8 @@ function roadCasingStyle(feature) {
     minor: { color: "--map-road-outline", casing: 5.5 },
     local: { color: "--map-road-outline", casing: 5.5 },
     public: { color: "--map-road-outline", casing: 5.5 },
-    haul: { color: "--map-road-outline", casing: 5.5 }
+    haul: { color: "--map-road-outline", casing: 5.5 },
+    community: { color: "--map-road-outline", casing: 4.5 }
   };
   const style = palette[type];
   return {
@@ -172,7 +174,7 @@ function reportAccessData(data) {
     const type = roadField(p, "type");
     const car = roadField(p, "car");
     const truck = roadField(p, "truck");
-    return !["major", "minor", "local", "public", "haul", "main"].includes(type) ||
+    return !["major", "minor", "local", "public", "haul", "community", "main"].includes(type) ||
       !["yes", "no"].includes(truck) ||
       (car !== "" && !["yes", "no"].includes(car));
   });
@@ -443,6 +445,8 @@ let destinationAreas = new Map();
 let ignoredDestinationNames = [];
 
 let destinationOptions = [];
+let destinationSelectionMode = false;
+let destinationSelectionLayer = null;
 let selectedContractors = new Set();
 let selectedDestinationTypes = new Set();
 let gateMarkers = new Map();
@@ -1540,6 +1544,104 @@ function buildDestinationOptions() {
   });
 }
 
+function destinationMatchesActiveFilters(item) {
+  return (!selectedContractors.size || selectedContractors.has(item.contractor)) &&
+    (!selectedDestinationTypes.size ||
+      selectedDestinationTypes.has(String(item.type || "").toUpperCase()));
+}
+
+function clearDestinationSelectionLayer() {
+  if (destinationSelectionLayer && map?.hasLayer(destinationSelectionLayer)) {
+    map.removeLayer(destinationSelectionLayer);
+  }
+  destinationSelectionLayer = null;
+}
+
+function renderDestinationSelectionLayer() {
+  clearDestinationSelectionLayer();
+  if (!destinationSelectionMode || !map) return;
+
+  const allowedNames = new Set(
+    destinationOptions
+      .filter(item => item.hasPolygon && destinationMatchesActiveFilters(item))
+      .map(item => item.name)
+  );
+  const visibleFeatures = [...destinationAreas.entries()]
+    .filter(([name]) => allowedNames.has(name))
+    .flatMap(([, features]) => features);
+
+  if (!visibleFeatures.length) {
+    status("No destination areas match the current filters.");
+    return;
+  }
+
+  destinationSelectionLayer = L.geoJSON(
+    { type: "FeatureCollection", features: visibleFeatures },
+    {
+      pane: "destinationSelectionPane",
+      bubblingMouseEvents: true,
+      style: feature => {
+        const name = nameOf(feature.properties || {}, "Destination area");
+        const selected = selectedDestination()?.name === name;
+        return {
+          color: selected ? themeColor("--map-area-outline") : "#2874B8",
+          weight: selected ? 3 : 1.8,
+          opacity: 1,
+          fillColor: selected ? themeColor("--map-area-fill") : "#58A6E7",
+          fillOpacity: selected ? 0.22 : 0.12,
+          lineJoin: "round"
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        const name = nameOf(feature.properties || {}, "Destination area");
+        layer.bindTooltip(name, { sticky: true, className: "destination-map-tooltip" });
+        layer.on("mouseover", () => layer.setStyle({ weight: 3, fillOpacity: 0.24 }));
+        layer.on("mouseout", () => layer.setStyle({
+          weight: selectedDestination()?.name === name ? 3 : 1.8,
+          fillOpacity: selectedDestination()?.name === name ? 0.22 : 0.12
+        }));
+        // Map-level click handling performs the hit test. Keeping polygon
+        // events bubbling ensures that handler also works with Leaflet's
+        // Canvas renderer (preferCanvas is enabled for this map).
+      }
+    }
+  ).addTo(map);
+}
+
+function setDestinationSelectionMode(enabled) {
+  destinationSelectionMode = Boolean(enabled);
+  const radio = document.querySelector('input[name="destinationModeChoice"][value="map"]');
+  if (radio) radio.checked = destinationSelectionMode;
+  const listRadio = document.querySelector('input[name="destinationModeChoice"][value="list"]');
+  if (listRadio) listRadio.checked = !destinationSelectionMode;
+  if (typeof setMapClickHitAreaEnabled === "function") {
+    setMapClickHitAreaEnabled(destinationSelectionMode || $("startMode")?.value === "map");
+  }
+  renderDestinationSelectionLayer();
+  if (destinationSelectionMode) {
+    // Remove any previously calculated route and its map highlights before
+    // presenting destination areas for selection.
+    clearRoute();
+    clearRouteDebugHighlight();
+    clearRouteFailureBanner();
+    map?.closePopup();
+    status("Select a highlighted destination area on the map. This does not change the starting location.");
+  }
+}
+
+function selectDestinationFromMap(name) {
+  const item = destinationOptions.find(option =>
+    option.name === name && option.hasPolygon && destinationMatchesActiveFilters(option)
+  );
+  if (!item) return;
+
+  const end = $("end");
+  end.value = item.hasAccessPoint ? String(item.index) : "missing:" + item.name;
+  setDestinationSelectionMode(false);
+  renderDestinationOptions();
+  end.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 function renderDestinationOptions() {
   const previous = $("end").value;
   const query = searchKey($("destinationSearch").value);
@@ -1620,6 +1722,7 @@ function renderDestinationOptions() {
     (retained ? ". Current selection retained." : ".");
   const clearFilters = $("contractorFilterClear");
   if (clearFilters) clearFilters.disabled = activeFilterCount === 0;
+  renderDestinationSelectionLayer();
 }
 
 
@@ -1821,56 +1924,83 @@ function calculate(collapseMobilePanelOnSuccess = false) {
     const previous = new Map();
     const source = new Map();
     const visited = new Set();
+    const searchStates = new Map();
+    const roadById = new Map(roads.map(road => [road.id, road]));
+    const stateKey = (node, communityEntered) =>
+      JSON.stringify([node, communityEntered]);
 
     for (const start of prepared.sources) {
       const id = start.location.node;
+      // If the origin is attached directly to a community road, the route
+      // has entered the community-road network before its first graph edge.
+      const attachedRoad = roadById.get(start.location.attachedRoadId);
+      const communityEntered = attachedRoad?.type === "community";
+      const key = stateKey(id, communityEntered);
 
-      if (!best.has(id)) {
-        best.set(id, 0);
-        source.set(id, start);
+      if (!best.has(key)) {
+        best.set(key, 0);
+        source.set(key, start);
+        searchStates.set(key, { node: id, communityEntered });
       }
     }
 
     const end = destination.node;
+    let endStateKey = null;
 
     while (true) {
-      let current = null;
+      let currentKey = null;
       let distance = Infinity;
 
-      for (const [id, value] of best) {
-        if (!visited.has(id) && value < distance) {
-          current = id;
+      for (const [key, value] of best) {
+        if (!visited.has(key) && value < distance) {
+          currentKey = key;
           distance = value;
         }
       }
 
-      if (current === null || current === end) break;
+      if (currentKey === null) break;
+      const currentState = searchStates.get(currentKey);
+      if (currentState.node === end) {
+        endStateKey = currentKey;
+        break;
+      }
 
-      visited.add(current);
+      visited.add(currentKey);
 
-      for (const edge of adjacency.get(current) || []) {
+      for (const edge of adjacency.get(currentState.node) || []) {
         if (edge.roadId !== undefined && edge.roadId !== null) {
           routeDebugRoadIds.add(edge.roadId);
         }
-        if (visited.has(edge.to)) continue;
+
+        const edgeRoad = roadById.get(edge.roadId);
+        const edgeIsCommunity = edgeRoad?.type === "community";
+
+        // After entering a community road, only community-road edges may
+        // be used. The state is part of the Dijkstra key so reaching the same
+        // node before and after entering community roads remains distinct.
+        if (currentState.communityEntered && !edgeIsCommunity) continue;
+
+        const nextCommunityEntered =
+          currentState.communityEntered || edgeIsCommunity;
+        const nextKey = stateKey(edge.to, nextCommunityEntered);
+        if (visited.has(nextKey)) continue;
 
         // Dijkstra minimizes travel time using the speed of each road link.
         const candidate = distance + edge.seconds;
 
-        if (candidate < (best.get(edge.to) ?? Infinity)) {
-          best.set(edge.to, candidate);
-
-          previous.set(edge.to, {
-            from: current,
-            edge
+        if (candidate < (best.get(nextKey) ?? Infinity)) {
+          best.set(nextKey, candidate);
+          previous.set(nextKey, { from: currentKey, edge });
+          source.set(nextKey, source.get(currentKey));
+          searchStates.set(nextKey, {
+            node: edge.to,
+            communityEntered: nextCommunityEntered
           });
-
-          source.set(edge.to, source.get(current));
         }
       }
     }
 
-    if (!best.has(end)) {
+    if (endStateKey === null) {
       throw new Error(
         liveMode
           ? "No connected road route from your attached position."
@@ -1880,7 +2010,7 @@ function calculate(collapseMobilePanelOnSuccess = false) {
       );
     }
 
-    const start = source.get(end);
+    const start = source.get(endStateKey);
     if (!start) throw new Error("Starting point unavailable.");
 
     if (start.index !== null) {
@@ -1889,14 +2019,17 @@ function calculate(collapseMobilePanelOnSuccess = false) {
     }
 
     const edges = [];
-    let id = end;
+    let currentKey = endStateKey;
 
-    while (id !== start.location.node) {
-      const step = previous.get(id);
+    while (currentKey !== stateKey(
+      start.location.node,
+      roadById.get(start.location.attachedRoadId)?.type === "community"
+    )) {
+      const step = previous.get(currentKey);
       if (!step) throw new Error("Cannot reconstruct route.");
 
       edges.push(step.edge);
-      id = step.from;
+      currentKey = step.from;
     }
 
     edges.reverse();
@@ -2081,6 +2214,32 @@ async function init() {
     map.on("mousemove", event => setMapClickHoverCursor(event.latlng));
     map.on("mouseout", () => setMapClickHoverCursor(null));
     map.on("click", event => {
+      // Destination selection is handled independently from origin selection.
+      // Hit-test the displayed destination polygons explicitly so selection
+      // works consistently with both SVG and Canvas Leaflet renderers.
+      if (destinationSelectionMode) {
+        const point = map.latLngToLayerPoint(event.latlng);
+        let selectedName = null;
+        const inspectLayer = layer => {
+          if (selectedName) return;
+          if (typeof layer.eachLayer === "function" && !layer.getLatLngs) {
+            layer.eachLayer(inspectLayer);
+            return;
+          }
+          const hit = typeof layer._containsPoint === "function"
+            ? layer._containsPoint(point)
+            : layer.getBounds?.().contains(event.latlng);
+          if (hit && layer.feature?.properties) {
+            selectedName = nameOf(layer.feature.properties, "Destination area");
+          }
+        };
+        destinationSelectionLayer?.eachLayer(inspectLayer);
+        if (selectedName) {
+          selectDestinationFromMap(selectedName);
+          return;
+        }
+        return;
+      }
       if ($("startMode")?.value !== "map") return;
       if (typeof setMapClickOrigin !== "function") {
         const message = "Map click received, but origin-selection code is unavailable.";
@@ -2112,6 +2271,9 @@ async function init() {
 
     map.createPane("siteReferenceRoads");
     map.getPane("siteReferenceRoads").style.zIndex = "300";
+
+    map.createPane("destinationSelectionPane");
+    map.getPane("destinationSelectionPane").style.zIndex = "480";
 
     map.createPane("selectedLaarPane");
     map.getPane("selectedLaarPane").style.zIndex = "500";
@@ -2170,7 +2332,7 @@ async function init() {
     const visibleGeometryStartedAt = performance.now();
     loadDestinationAreas(areas);
 
-    const roadTypeOrder = { local: 0, minor: 1, major: 2, main: 2, public: 3, haul: 4 };
+    const roadTypeOrder = { local: 0, minor: 1, major: 2, main: 2, public: 3, haul: 4, community: 5 };
     const orderedRoadData = {
       ...r,
       features: [...(r.features || [])].sort((a, b) => {
@@ -2352,6 +2514,14 @@ async function init() {
         if (!radio.checked) return;
         $("startMode").value = radio.value;
         $("startMode").dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+
+    document.querySelectorAll('input[name="destinationModeChoice"]').forEach(radio => {
+      radio.checked = radio.value === "list";
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        setDestinationSelectionMode(radio.value === "map");
       });
     });
 
