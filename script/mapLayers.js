@@ -1,13 +1,5 @@
 "use strict";
 
-function themeColor(property) {
-  return getComputedStyle(document.documentElement).getPropertyValue(property).trim();
-}
-
-function themeNumber(property) {
-  return Number.parseFloat(themeColor(property));
-}
-
 (async function initialiseBackgroundLayers() {
   const definitions = [
     {
@@ -293,35 +285,9 @@ function themeNumber(property) {
       if (bounds.isValid()) {
         siteBounds.extend(bounds);
 
-        map.setMaxBounds(siteBounds.pad(1.5));
-
-        map.setMinZoom(
-          Math.max(
-            0,
-            map.getBoundsZoom(siteBounds.pad(1.5)) - 1
-          )
-        );
-
-        /*
-         * Do not interrupt a selected LAAR route if the
-         * backgrounds finish loading after user selection.
-         */
-        if (
-          typeof selectedAreaLayer === "undefined" ||
-          !selectedAreaLayer
-        ) {
-          const initialCenter = typeof roadNetworkCenter === "function" ? roadNetworkCenter() : siteBounds.getCenter();
-          const initialZoom = Math.log2(
-            156543.03392804097 * Math.cos(initialCenter.lat * Math.PI / 180) *
-            100 / 800
-          );
-          map.setView(initialCenter, initialZoom, { animate: false });
-          const sidebarWidth = document.querySelector("body > aside")?.getBoundingClientRect().width || 0;
-          const horizontalOffset = window.matchMedia("(max-width: 760px)").matches
-            ? 0
-            : sidebarWidth / 2;
-          if (horizontalOffset) map.panBy([horizontalOffset, 0], { animate: false });
-        }
+        // Do not constrain the map camera to the site boundary. Users may
+        // zoom out or pan freely; app.js owns the initial boundary fit and
+        // routeDisplay.js frames only explicitly selected destinations.
       }
     }
   }

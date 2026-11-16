@@ -1,7 +1,3 @@
-function themeColor(property) {
-  return getComputedStyle(document.documentElement).getPropertyValue(property).trim();
-}
-
 function showDestinationArea(destination) {
   const matching = destinationAreas.get(destination.name);
 
@@ -40,7 +36,11 @@ function showDestinationArea(destination) {
   ).addTo(map);
 }
 
+// Called only after the user selects a new destination and its route is displayed.
 function fitSelectedResult(includeStart = false) {
+  // Keep the boundary view authoritative while startup route rendering is in progress.
+  if (window.laarInitialMapViewPending) return;
+
   let bounds = null;
 
   const extendBounds = candidate => {
@@ -60,72 +60,41 @@ function fitSelectedResult(includeStart = false) {
   // When no route exists, frame the destination area together with its
   // applicable origin so the user can see both ends of the failed journey.
   if (includeStart) {
-    const startMode = $("startMode")?.value || "gate";
-
+    const startMode = $("startMode")?.value || "live";
     if (startMode === "live" && livePosition) {
       const point = L.latLng(livePosition.latitude, livePosition.longitude);
       extendBounds(L.latLngBounds(point, point));
     } else if (startMode === "map" && mapClickOrigin?.point) {
       const point = L.latLng(ll(mapClickOrigin.point));
       extendBounds(L.latLngBounds(point, point));
-    } else if (startMode !== "live" && startMode !== "map") {
-      // Gate mode uses all valid gates as candidate origins. Include those
-      // candidates because no single gate can be selected when no path exists.
-      locations
-        .filter(location => location.kind === "gate" && location.valid && location.point)
-        .forEach(location => {
-          const point = L.latLng(ll(location.point));
-          extendBounds(L.latLngBounds(point, point));
-        });
     }
   }
 
   if (bounds?.isValid()) {
-    map.fitBounds(bounds.pad(0.15), {
-      animate: false
+    const targetBounds = bounds.pad(0.15);
+    const currentZoom = map.getZoom();
+    const targetZoom = map.getBoundsZoom(targetBounds, false);
+    const zoomChange = targetZoom - currentZoom;
+    const zoomMagnitude = Math.abs(zoomChange);
+
+    // Scale transition time with the size and direction of the zoom change.
+    // Large zoom-ins take slightly longer to keep the approach readable;
+    // zoom-outs remain a little quicker while still feeling smooth.
+    const secondsPerZoomLevel = zoomChange > 0 ? 0.34 : 0.29;
+    const duration = Math.max(
+      0.7,
+      Math.min(2.5, 0.7 + zoomMagnitude * secondsPerZoomLevel)
+    );
+
+    map.fitBounds(targetBounds, {
+      animate: true,
+      duration,
+      easeLinearity: 0.25
     });
   }
 }
 
 /* ROAD GEOMETRY — ALSO USED BY live-location.js */
-
-function showRouteSummary(destination, start, metres, seconds, roadNames, liveMode) {
-  $("summaryDestination").textContent = destination.name;
-  $("summaryStart").textContent = start.location.name;
-
-  $("summaryDistance").textContent = metres >= 1000
-    ? (metres / 1000).toFixed(2) + " km"
-    : metres.toFixed(0) + " m";
-
-  $("summaryTime").textContent =
-    (seconds / 60).toFixed(1) + " min";
-
-  if ($("journeyControls")) $("journeyControls").hidden = $("startMode")?.value !== "live";
-  // A reroute during an active journey must not reset the Start/Stop controls.
-  if (!liveNavigationActive) {
-    if ($("startLiveRoute")) $("startLiveRoute").hidden = false;
-    if ($("stopLiveRoute")) $("stopLiveRoute").hidden = true;
-    if ($("journeyGuidance")) $("journeyGuidance").hidden = true;
-  }
-
-  $("routeDetails").textContent =
-    "Roads: " +
-    (roadNames.length ? roadNames.join(" → ") : "Same network node") +
-    "\n\nStart-to-road offset: " +
-    start.location.offset.toFixed(1) + " m" +
-    "\nDestination centroid-to-road offset: " +
-    destination.offset.toFixed(1) + " m" +
-    "\n\nRoutes end at the centroid's nearest road position, " +
-    "not necessarily an approved entrance. Off-road gaps, " +
-    "small connection gaps, queues and delays are excluded." +
-    (liveMode
-      ? "\n\nLive navigation follows your GPS position. " +
-        "With GPS accuracy of 50 m or better, the route is recalculated when you are more than 75 m off route."
-      : "");
-
-  $("routeSummary").hidden = false;
-}
-
 
 /* CLEAR RESULT — USED BY live-location.js */
 
@@ -152,11 +121,6 @@ function clearRoute() {
     selectedAreaLayer = null;
   }
 
-  if ($("routeSummary")) {
-    $("routeSummary").hidden = true;
-  }
-
-  updateGateHighlights();
 }
 
 

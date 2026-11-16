@@ -1,13 +1,11 @@
 "use strict";
 
-function themeColor(property) {
-  return getComputedStyle(document.documentElement).getPropertyValue(property).trim();
-}
-
 let locationWatchId = null;
 let livePosition = null;
 let previousHeadingPosition = null;
 let liveHeadingDegrees = null;
+let deviceHeadingDegrees = null;
+let deviceOrientationListening = false;
 let nextRouteBearing = null;
 let journeyStartConfirmed = false;
 let liveLocationMarker = null;
@@ -33,9 +31,10 @@ const MAIN_ROAD_40_PERCENT_BUFFER_METRES = 50;
 let locationWatchGeneration = 0;
 const LIVE_LOCATION_MAX_AGE = 60000;
 
-function locationStatus(text) {
-  const element = $("locationStatus");
-  if (element) element.textContent = text;
+let liveJourneyStartPending = false;
+
+function locationStatus(_text) {
+  // Location feedback is intentionally not rendered in the side menu.
 }
 
 function removeMapClickOrigin() {
@@ -156,10 +155,6 @@ function routeDistanceFromRoadProjection(road, projection, destinationNode) {
     if (current === destinationNode) return currentDistance;
     visited.add(current);
     for (const edge of graph.get(current) || []) {
-      if (edge.roadId !== undefined && edge.roadId !== null &&
-          typeof routeDebugRoadIds !== "undefined") {
-        routeDebugRoadIds.add(edge.roadId);
-      }
       if (visited.has(edge.to)) continue;
       const nextDistance = currentDistance + edge.seconds;
       if (nextDistance < (distances.get(edge.to) ?? Infinity)) {
@@ -247,6 +242,7 @@ function stopLiveLocation(showMessage = true) {
   releaseScreenWakeLock();
   previousHeadingPosition = null;
   liveHeadingDegrees = null;
+  stopDeviceHeading();
   if ($("journeyGuidance")) $("journeyGuidance").hidden = true;
   if ($("startLiveRoute")) $("startLiveRoute").hidden = false;
   if ($("stopLiveRoute")) $("stopLiveRoute").hidden = true;
@@ -255,13 +251,11 @@ function stopLiveLocation(showMessage = true) {
   lastLiveRerouteAt = 0;
   removeLiveLocationLayers();
   syncHeaderLiveRouteButton();
-  if ($("stopLocation")) $("stopLocation").disabled = true;
   if ($("startMode")?.value === "live") {
     clearRoute();
-    $("start").selectedIndex = -1;
-    status("Live location stopped. Start it again, or choose Best gate — automatic.");
+    status("Live location stopped. Start it again to refresh your position.");
   }
-  if (showMessage) locationStatus("Live location is off.");
+  if (showMessage) locationStatus("");
 }
 
 function bearingDegrees(lat1, lon1, lat2, lon2) {
@@ -271,6 +265,68 @@ function bearingDegrees(lat1, lon1, lat2, lon2) {
   const x = Math.cos(p1) * Math.sin(p2) -
     Math.sin(p1) * Math.cos(p2) * Math.cos(dLon);
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function isMobileOrientationDevice() {
+  return Boolean(window.matchMedia?.("(pointer: coarse)").matches || navigator.maxTouchPoints > 0);
+}
+
+function applyDeviceOrientationHeading(event) {
+  let heading = null;
+  if (Number.isFinite(event.webkitCompassHeading)) {
+    // iOS exposes a compass heading in degrees clockwise from magnetic north.
+    heading = event.webkitCompassHeading;
+  } else if (
+    (event.absolute === true || event.type === "deviceorientationabsolute") &&
+    Number.isFinite(event.alpha)
+  ) {
+    // Chrome Android provides the Earth-referenced reading through
+    // deviceorientationabsolute; alpha is converted to clockwise heading.
+    const screenAngle = Number.isFinite(screen.orientation?.angle)
+      ? screen.orientation.angle
+      : (Number.isFinite(window.orientation) ? window.orientation : 0);
+    heading = 360 - event.alpha + screenAngle;
+  }
+  if (!Number.isFinite(heading)) {
+    return;
+  }
+  deviceHeadingDegrees = (heading + 360) % 360;
+  liveHeadingDegrees = deviceHeadingDegrees;
+  updateLiveMarkerHeading();
+}
+
+function attachDeviceOrientationListeners() {
+  if (deviceOrientationListening) return;
+  window.addEventListener("deviceorientation", applyDeviceOrientationHeading, true);
+  window.addEventListener("deviceorientationabsolute", applyDeviceOrientationHeading, true);
+  deviceOrientationListening = true;
+}
+
+function startDeviceHeading(requestPermission = false) {
+  if (!isMobileOrientationDevice() || !("DeviceOrientationEvent" in window)) return;
+  const OrientationEvent = window.DeviceOrientationEvent;
+  if (typeof OrientationEvent.requestPermission === "function") {
+    // iOS requires this call to originate directly from a user gesture.
+    if (!requestPermission) return;
+    try {
+      OrientationEvent.requestPermission().then(permission => {
+        if (permission === "granted") attachDeviceOrientationListeners();
+      }).catch(error => console.warn("Compass permission was not granted:", error));
+    } catch (error) {
+      console.warn("Compass permission could not be requested:", error);
+    }
+    return;
+  }
+  attachDeviceOrientationListeners();
+}
+
+function stopDeviceHeading() {
+  if (deviceOrientationListening) {
+    window.removeEventListener("deviceorientation", applyDeviceOrientationHeading, true);
+    window.removeEventListener("deviceorientationabsolute", applyDeviceOrientationHeading, true);
+    deviceOrientationListening = false;
+  }
+  deviceHeadingDegrees = null;
 }
 
 function updateLiveMarkerHeading() {
@@ -346,18 +402,32 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function startLiveRoute() {
+  // GPS is already running independently. The Start gesture is used only
+  // to request compass permission and activate live route guidance.
+  startDeviceHeading(true);
   if (!livePosition) {
-    locationStatus("Waiting for GPS. Allow location access, then try Start route again.");
+    liveJourneyStartPending = true;
+    locationStatus("Waiting for your current GPS location to start live guidance.");
     return;
   }
   if (!routeLayer) {
-    locationStatus("Choose a LAAR destination and wait for the route preview before starting.");
+    liveJourneyStartPending = true;
+    locationStatus("Waiting for the route to be calculated from your location.");
+    calculate();
     return;
   }
+  liveJourneyStartPending = false;
+  confirmBeginJourney();
+}
+
+function completePendingLiveJourneyStart() {
+  if (!liveJourneyStartPending || !livePosition || !routeLayer) return;
+  liveJourneyStartPending = false;
   confirmBeginJourney();
 }
 
 function stopLiveRoute() {
+  liveJourneyStartPending = false;
   liveNavigationActive = false;
   liveCameraFollowEnabled = false;
   journeyStartConfirmed = false;
@@ -368,20 +438,10 @@ function stopLiveRoute() {
   if ($("stopLiveRoute")) $("stopLiveRoute").hidden = true;
   syncHeaderLiveRouteButton();
 
-  // Once live-following stops, frame the entire route preview again.
-  if (map && routeLayer && typeof routeLayer.getBounds === "function") {
-    const bounds = routeLayer.getBounds();
-    if (bounds.isValid()) {
-      map.invalidateSize({ pan: false });
-      map.fitBounds(bounds.pad(0.12), {
-        padding: [24, 24],
-        maxZoom: 16,
-        animate: false
-      });
-    }
-  }
+  // Preserve the user's current map view when live navigation stops.
 
-  locationStatus("Routing stopped. Your location is still being tracked; start the route again or use Stop location to turn GPS off.");
+  stopDeviceHeading();
+  locationStatus("");
 }
 
 function confirmBeginJourney() {
@@ -457,12 +517,11 @@ function followLiveLocation() {
   calculate();
 }
 
-function startLiveLocation() {
+function startLiveLocation(requestOrientationPermission = false) {
   if ($("startMode").value !== "live") $("startMode").value = "live";
   removeMapClickOrigin();
   stopLiveLocation(false);
   clearRoute();
-  $("start").selectedIndex = -1;
   if (!window.isSecureContext) {
     locationStatus("Location requires HTTPS or a trusted localhost page.");
     return;
@@ -484,9 +543,9 @@ function startLiveLocation() {
           locationStatus("The browser returned an invalid location.");
           return;
         }
-        if (Number.isFinite(position.coords.heading) && position.coords.speed > 0.5) {
+        if (deviceHeadingDegrees === null && Number.isFinite(position.coords.heading) && position.coords.speed > 0.5) {
           liveHeadingDegrees = (position.coords.heading + 360) % 360;
-        } else if (previousHeadingPosition) {
+        } else if (deviceHeadingDegrees === null && previousHeadingPosition) {
           const moved = dist(
             xy([previousHeadingPosition.longitude, previousHeadingPosition.latitude]),
             xy([longitude, latitude])
@@ -514,7 +573,7 @@ function startLiveLocation() {
           liveLocationMarker = L.marker(latlng, {
             icon: L.divIcon({
               className: "laar-live-heading-marker",
-              html: '<span class="laar-live-heading-arrow" aria-hidden="true"></span><span class="laar-live-heading-core" aria-hidden="true"></span>',
+              html: '<span class="laar-live-heading-rotator"><span class="laar-live-heading-arrow" aria-hidden="true"></span><span class="laar-live-heading-core" aria-hidden="true"></span></span>',
               iconSize: [32, 42],
               iconAnchor: [16, 22]
             }),
@@ -522,15 +581,13 @@ function startLiveLocation() {
             pane: "liveLocationPane",
             keyboard: false
           }).addTo(map);
-          liveLocationMarker.bindTooltip("My live location", {direction: "top"});
         } else {
           liveLocationMarker.setLatLng(latlng);
         }
         // No accuracy circle: keep the map clean and make the 2D position marker prominent.
-        $("stopLocation").disabled = false;
         updateJourneyGuidance();
         followLiveLocation();
-        locationStatus(journeyStartConfirmed ? "Journey started" : "Journey ended");
+        locationStatus(journeyStartConfirmed ? "Journey started" : "");
       },
       error => {
         if (generation !== locationWatchGeneration || $("startMode").value !== "live") return;
@@ -544,7 +601,6 @@ function startLiveLocation() {
       },
       {enableHighAccuracy: true, timeout: 20000, maximumAge: 0}
     );
-    $("stopLocation").disabled = false;
   } catch (error) {
     stopLiveLocation(false);
     locationStatus("Cannot start live location: " + error.message);
@@ -569,13 +625,6 @@ function recenterMapOnStart() {
     return;
   }
 
-  const selectedValue = $("start")?.value;
-  const selectedIndex = selectedValue === "" || selectedValue == null ? NaN : Number(selectedValue);
-  if (Number.isInteger(selectedIndex) && locations[selectedIndex]?.point) {
-    map.setView(L.latLng(ll(locations[selectedIndex].point)), map.getZoom(), {animate: true});
-    return;
-  }
-
   if (routeLayer && typeof routeLayer.getBounds === "function" && routeLayer.getLayers().length) {
     const bounds = routeLayer.getBounds();
     if (bounds.isValid()) {
@@ -585,7 +634,7 @@ function recenterMapOnStart() {
     }
   }
 
-  locationStatus("Select a start point or enable My location first.");
+  locationStatus("Waiting for your current location.");
 }
 
 function addRecenterControl() {
@@ -623,7 +672,7 @@ calculate = function () {
 function initialiseLocationControls() {
   $("startLiveRoute")?.addEventListener("click", startLiveRoute);
   $("stopLiveRoute")?.addEventListener("click", stopLiveRoute);
-  for (const id of ["startMode", "locate", "stopLocation", "locationStatus"]) {
+  for (const id of ["startMode"]) {
     if (!$(id)) throw new Error("index.html is missing element id='" + id + "'.");
   }
   addRecenterControl();
@@ -631,36 +680,22 @@ function initialiseLocationControls() {
     if (liveNavigationActive) liveCameraFollowEnabled = false;
   });
   $("startMode").disabled = false;
-  $("locate").disabled = true;
-  $("stopLocation").disabled = true;
   $("startMode").onchange = () => {
     clearRoute();
-    $("start").selectedIndex = -1;
     if ($("startMode").value === "live") {
       if (typeof setMapClickHitAreaEnabled === "function") setMapClickHitAreaEnabled(false);
       removeMapClickOrigin();
-      $("locate").disabled = false;
-      startLiveLocation();
+      startLiveLocation(false);
     } else if ($("startMode").value === "map") {
+      liveJourneyStartPending = false;
       stopLiveLocation(false);
       if (typeof setMapClickHitAreaEnabled === "function") setMapClickHitAreaEnabled(true);
-      $("locate").disabled = true;
-      $("stopLocation").disabled = true;
       removeMapClickOrigin();
       map.closePopup();
       locationStatus("Click anywhere on the map. The origin snaps to the nearest road permitted for the selected vehicle within 15 km. The route follows mapped connections and road directions.");
       status("Step 1 of 2: click anywhere on the map to set the origin.");
-    } else {
-      if (typeof setMapClickHitAreaEnabled === "function") setMapClickHitAreaEnabled(false);
-      stopLiveLocation();
-      removeMapClickOrigin();
-      $("locate").disabled = true;
-      if ($("end").value !== "") calculate();
-      else status("Gate mode selected. Select a LAAR destination.");
     }
   };
-  $("locate").onclick = startLiveLocation;
-  $("stopLocation").onclick = () => stopLiveLocation();
   window.addEventListener("pagehide", () => stopLiveLocation(false));
 }
 
@@ -670,12 +705,7 @@ function prepareRoutingStart() {
     throw new Error("Click anywhere on the map to set an origin.");
   }
   if (startMode !== "live" && startMode !== "map") {
-    const sources = locations
-      .map((location, index) => ({location, index}))
-      .filter(item => item.location.kind === "gate" && item.location.valid &&
-        adjacency.has(item.location.node));
-    if (!sources.length) throw new Error("No valid starting gates.");
-    return {graph: adjacency, sources};
+    throw new Error("Unsupported start mode. Choose Current Location or Set on Map.");
   }
   if (startMode === "live" && !livePosition) {
     throw new Error("Your location is not available. Start live location and allow access.");
