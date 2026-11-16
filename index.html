@@ -30,7 +30,7 @@
 
   <link
     rel="stylesheet"
-    href="style.css?v=road-name-labels-1"
+    href="style.css?v=map-and-routes-loading-2"
   >
 <!-- LIBRARIES -->
 
@@ -47,27 +47,14 @@
 
   <!-- APPLICATION: LOAD EACH SCRIPT ONCE -->
 
-  <script
-    defer
-    src="script/app.js?v=hide-map-attribution-1"
-  ></script>
-<script
-    defer
-    src="script/location.js?v=live-tracking-camera-wakelock-3"
-  ></script>
-
-  <script
-    defer
-    src="script/routing.js?v=all-destinations-route-status-1"
-  ></script>
-
-  <script
-    defer
-    src="script/mapLayers.js?v=road-name-labels-1"
-  ></script>
-
-  <script defer src="script/routeDisplay.js?v=failed-route-start-destination-fit-1"></script>
-  <script defer src="script/map.js?v=road-name-labels-1"></script>
+  <!-- Shared classic-script namespace: preserve this dependency order.
+       main.js checks required globals before starting the application. -->
+  <script defer src="script/app.js?v=mobile-zoom-20-1"></script>
+  <script defer src="script/location.js?v=cleanup-20261116-1"></script>
+  <script defer src="script/routeDisplay.js?v=cleanup-20261116-1"></script>
+  <script defer src="script/map.js?v=main-refactor-20261115"></script>
+  <script defer src="script/routing.js?v=main-refactor-20261115"></script>
+  <script defer src="script/mapLayers.js?v=cleanup-20261116-1"></script>
 </head>
 
 <body>
@@ -76,12 +63,10 @@
     <span class="map-loading-dialog__spinner" aria-hidden="true"></span>
     <span>Map Loading...</span>
   </div>
-
-  <div id="vehicleRoutingUpdateDialog" class="map-loading-dialog vehicle-routing-update-dialog" role="status" aria-live="polite" hidden>
+  <div id="routesLoadingDialog" class="map-loading-dialog routes-loading-dialog" role="status" aria-live="polite" hidden>
     <span class="map-loading-dialog__spinner" aria-hidden="true"></span>
-    <span>Updating vehicle routes...</span>
+    <span>Routes Loading...</span>
   </div>
-
 
   <aside id="navigationPanel" aria-label="Navigation controls">
 
@@ -155,11 +140,7 @@
         <label><input type="radio" name="startModeChoice" value="live" checked> Current Location</label>
         <label><input type="radio" name="startModeChoice" value="map"> Set on Map</label>
       </fieldset>
-      <select id="startMode" hidden disabled aria-hidden="true" tabindex="-1">
-        <option value="gate">Access Gate</option>
-        <option value="live" selected>Current Location</option>
-        <option value="map">Set on Map</option>
-      </select>
+      <input id="startMode" type="hidden" value="live">
     </section>
 
 <!-- DESTINATION -->
@@ -188,154 +169,19 @@
       </div>
       <button id="destinationPickerToggle" class="destination-picker-toggle" type="button" aria-expanded="false" aria-controls="destinationPickerList" disabled>Select destination…</button>
       <div id="destinationPickerList" class="destination-picker-list" role="listbox" aria-label="Available destinations" hidden></div>
+      <label for="destinationSearch">Find destination</label>
+      <input id="destinationSearch" type="search" placeholder="Type to search…" autocomplete="off"
+        aria-describedby="searchStatus" disabled>
+      <p id="searchStatus" class="field-help" aria-live="polite"></p>
       <select id="end" disabled aria-hidden="true" tabindex="-1">
         <option value="" selected>Select destination…</option>
       </select>
     </section>
 
-<!-- DEVELOPMENT FEATURES -->
-    <section class="control-section development-section">
-      <div class="development-section-heading">
-        <button id="developmentToggle" class="development-toggle" type="button" aria-expanded="false" aria-controls="developmentContent" aria-label="Expand Development Features">+</button>
-      </div>
-      <div id="developmentContent" class="development-content" hidden>
-      <h2 id="developmentHeading">Development Features</h2>
-
-      <div class="button-row development-actions">
-        <button id="clear" type="button" disabled>Clear</button>
-        <button id="fit" type="button" disabled>Whole site</button>
-      </div>
-
-      <p id="status" class="setup-status" role="status" aria-live="polite">
-        Loading…
-      </p>
-      <label for="destinationSearch">Find destination</label>
-      <input id="destinationSearch" type="search" placeholder="Type to search…" autocomplete="off"
-        aria-describedby="searchStatus" disabled>
-      <p id="searchStatus" class="field-help" aria-live="polite"></p>
-
-      <section class="diagnostics-section" aria-labelledby="diagnosticsHeading">
-        <h3 id="diagnosticsHeading">Diagnostics</h3>
-        <p class="field-help">Destinations that cannot be reached with the selected vehicle and start location:</p>
-        <p id="diagnosticsStatus" class="field-help" aria-live="polite">Checking destination access…</p>
-        <ul id="unreachableDestinations" class="unreachable-destinations"></ul>
-        <h4 class="map-load-heading">Map load timings</h4>
-        <p id="mapLoadTimingSummary" class="field-help" aria-live="polite">Collecting timings…</p>
-        <ol id="mapLoadTimings" class="map-load-timings"></ol>
-      </section>
-      </div>
-    </section>
-
-<!-- ROUTE SUMMARY -->
-
-    <section
-      id="routeSummary"
-      class="route-summary"
-      aria-labelledby="routeSummaryHeading"
-      aria-live="polite"
-      hidden
-    >
-      <h2 id="routeSummaryHeading">
-        Route
-      </h2>
-
-      <div
-        id="summaryDestination"
-        class="summary-destination"
-      ></div>
-
-      <p class="summary-start">
-        From <span id="summaryStart"></span>
-      </p>
-
-      <div class="summary-metrics">
-        <div>
-          <span class="metric-label">
-            Distance
-          </span>
-
-          <span
-            id="summaryDistance"
-            class="metric-value"
-          ></span>
-        </div>
-
-        <div>
-          <span class="metric-label">
-            Est. time
-          </span>
-
-          <span
-            id="summaryTime"
-            class="metric-value"
-          ></span>
-        </div>
-      </div>
-
-      <details class="route-details">
-        <summary>
-          Details
-        </summary>
-
-        <p id="routeDetails"></p>
-      </details>
-    </section>
-
-
-    <!-- SHARE -->
-
-    <section
-      class="control-section share-section"
-      aria-labelledby="shareHeading"
-    >
-      <h2 id="shareHeading">
-        Share
-      </h2>
-
-      <button
-        id="copyLink"
-        type="button"
-        disabled
-      >
-        Copy link
-      </button>
-
-      <p
-        id="shareStatus"
-        class="field-help"
-        role="status"
-        aria-live="polite"
-      >
-        Select a LAAR.
-      </p>
-
-      <div id="shareFallback" hidden>
-        <label for="shareLink">
-          Link
-        </label>
-
-        <input
-          id="shareLink"
-          type="text"
-          readonly
-        >
-      </div>
-    </section>
-
-
-    <span id="networkDate" hidden></span>
 
 
 
-      <section class="start-gate-section" aria-label="Gate and location controls">
-        <label for="start">Selected gate</label>
-        <select id="start" disabled></select>
-        <div class="button-row">
-          <button id="locate" type="button" disabled>Locate me</button>
-          <button id="stopLocation" type="button" disabled>Stop</button>
-        </div>
-        <p id="locationStatus" class="location-status" role="status" aria-live="polite">Location off.</p>
-      </section>
+
 
     <noscript>
       <p class="setup-status">
@@ -372,7 +218,7 @@
   </div>
 
   <script defer src="script/ui.js?v=bottom-sheet-swipe-direction-1"></script>
-  <script defer src="script/main.js?v=project-structure-1"></script>
+  <script defer src="script/main.js?v=remove-status-panels-1"></script>
 
 </body>
 </html>
